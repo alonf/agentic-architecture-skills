@@ -68,12 +68,37 @@ pwsh -File ./eng/Test-Skills.ps1
 CI invokes exactly that and adds nothing of its own, so what fails in CI fails identically on your
 machine.
 
+## Verifying the install
+
+The claim that a clean machine installs this package in under a minute per host is checked, not
+asserted. One command builds a clean container — Node, git, the two hosts at pinned versions, a fresh
+user — installs the package from GitHub exactly as the section above documents, times each path, and
+confirms both skills are present afterwards:
+
+```powershell
+pwsh -File ./eng/Test-Install.ps1
+```
+
+It needs Docker running. The outcome is written to `tests/results/<date>-install-linux-container.md`;
+the committed files there are the recorded runs. The same script runs on the GitHub runner on every
+push to `main` (`.github/workflows/install-verification.yml`) and keeps its record as a workflow artifact.
+
 ## Development tooling
 
-The published package has **zero dependencies** — nothing is installed by consuming it. CI uses one
-external tool, pinned to an exact version: **markdownlint-cli 0.49.1**, run against the package's own
-`.markdownlint.json`. That is the complete list; if it grows, this section grows with it. Install the
-same version locally to make the lint check block on your machine as it does in CI:
+The published package has **zero dependencies** — nothing is installed by consuming it. Everything
+below is development and verification tooling, pinned to an exact version. If the list grows, this
+section grows with it.
+
+| Tool | Version | Used by |
+| ---- | ------- | ------- |
+| markdownlint-cli | 0.49.1 | `eng/Test-Skills.ps1`, against the package's own `.markdownlint.json` |
+| Docker | any current engine | `eng/Test-Install.ps1` |
+| `node` base image | 22.23.2-bookworm-slim | `tests/install/Dockerfile` |
+| Claude Code (`@anthropic-ai/claude-code`) | 2.1.267 | `tests/install/Dockerfile` — the host under test |
+| GitHub Copilot CLI (`@github/copilot`) | 1.0.83 | `tests/install/Dockerfile` — the host under test |
+| skills CLI (`skills`) | 1.5.25 | `tests/install/Dockerfile` — the `npx skills add` path |
+
+Install the same markdownlint locally to make the lint check block on your machine as it does in CI:
 
 ```powershell
 npm install --global markdownlint-cli@0.49.1

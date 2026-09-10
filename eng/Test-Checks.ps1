@@ -42,11 +42,51 @@ function Get-CheckStatus {
     )
     $output = & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-Skills.ps1') -PackageRoot $Root 2>&1
     $line = $output | Where-Object { $_ -match "^\w+\s+$([regex]::Escape($Check))\s" } | Select-Object -First 1
-    if (-not $line) { return 'NOT-REPORTED' }
-    ($line -split '\s+')[0]
+    if (-not $line) { return [pscustomobject]@{ Status = 'NOT-REPORTED'; Detail = '' } }
+    $status, $rest = "$line" -split '\s+', 2
+    [pscustomobject]@{ Status = $status; Detail = ($rest -replace "^$([regex]::Escape($Check))\s+", '') }
+}
+
+function Test-MaskProbe {
+    # Runs planted lines through Protect-Secret and asserts three things: the secret is gone from every
+    # line, every line still exists (a function returning nothing must not pass), and every line carries
+    # the *** marker where the secret was. -MaskSecret:$false withholds the value so only the shape or
+    # URL rule can catch it.
+    param(
+        [Parameter(Mandatory)][string[]] $Planted,
+        [Parameter(Mandatory)][string] $Secret,
+        [Parameter(Mandatory)][bool] $MaskSecret
+    )
+    $masked = @($Planted | ForEach-Object { if ($MaskSecret) { Protect-Secret -Text $_ -Secret $Secret } else { Protect-Secret -Text $_ } })
+    $leaked = @($masked | Where-Object { $_.Contains($Secret) })
+    $unmarked = @($masked | Where-Object { -not $_.Contains('***') })
+    $ok = ($masked.Count -eq $Planted.Count) -and ($leaked.Count -eq 0) -and ($unmarked.Count -eq 0)
+    $status = if ($leaked.Count -gt 0) { "LEAKED in $($leaked.Count) line(s)" }
+              elseif ($masked.Count -ne $Planted.Count) { "output count $($masked.Count) != $($Planted.Count)" }
+              elseif ($unmarked.Count -gt 0) { "$($unmarked.Count) line(s) without the *** marker" }
+              else { 'masked' }
+    [pscustomobject]@{ Proven = $ok; Status = $status }
+}
+
+function Edit-Skill {
+    # One regex replacement in one SKILL.md of the throwaway copy. Multiline so '$' can anchor a line end.
+    param(
+        [Parameter(Mandatory)][string] $Root,
+        [Parameter(Mandatory)][string] $Skill,
+        [Parameter(Mandatory)][string] $Pattern,
+        [Parameter(Mandatory)][AllowEmptyString()][string] $Replacement
+    )
+    $p = Join-Path $Root "skills/$Skill/SKILL.md"
+    $text = Get-Content -LiteralPath $p -Raw -Encoding UTF8
+    $edited = [regex]::Replace($text, $Pattern, $Replacement, [System.Text.RegularExpressions.RegexOptions]::Multiline)
+    # -ceq: PowerShell's -eq is case-insensitive, and one fixture changes only the case of a key.
+    if ($edited -ceq $text) { throw "Edit-Skill: pattern '$Pattern' matched nothing in $p; the fixture would prove nothing." }
+    Set-Content -LiteralPath $p -Value $edited -Encoding UTF8 -NoNewline
 }
 
 # Each case: the check it targets, and the single defect it introduces into a throwaway copy.
+# Optional 'Expect': a phrase the check's detail must contain, so the case proves the check failed for
+# the named reason and not for an unrelated one.
 $cases = @(
     @{ Check = 'frontmatter-schema'; Defect = 'forbidden allowed-tools key'; Mutate = {
             param($root)
@@ -172,17 +212,52 @@ $cases = @(
             New-Item -ItemType Directory -Path (Split-Path -Parent $p) -Force | Out-Null
             Set-Content -LiteralPath $p -Value "# A card`n`nNo terminal line here." -Encoding UTF8
         } }
-    @{ Check = 'frontmatter-schema'; Defect = "': ' inside an unquoted plain-scalar value (DRIFT-003)"; Mutate = {
+    # The plain-scalar cases keep both mandated separators intact, so the ONLY thing that can fail the
+    # check is the scalar rule itself - a mutation the shape check would also reject proves nothing
+    # about the rule (co-review finding, round 2). Each case also names the diagnostic it expects.
+    @{ Check = 'frontmatter-schema'; Defect = "': ' inside description prose, separators intact (DRIFT-003)"; Expect = 'mapping indicator'; Mutate = {
             param($root)
-            $p = Join-Path $root 'skills/agentic-architecture-router/SKILL.md'
-            $text = Get-Content -LiteralPath $p -Raw -Encoding UTF8
-            Set-Content -LiteralPath $p -Value ($text -replace 'description: USE FOR - ', 'description: USE FOR: ') -Encoding UTF8 -NoNewline
+            Edit-Skill $root 'agentic-architecture-router' 'decisions before implementation - ' 'decisions: before implementation - '
         } }
-    @{ Check = 'frontmatter-schema'; Defect = "': ' inside a when_to_use item"; Mutate = {
+    @{ Check = 'frontmatter-schema'; Defect = "': ' inside a when_to_use item"; Expect = 'mapping indicator'; Mutate = {
             param($root)
-            $p = Join-Path $root 'skills/maf-architecture-mapping/SKILL.md'
-            $text = Get-Content -LiteralPath $p -Raw -Encoding UTF8
-            Set-Content -LiteralPath $p -Value ($text -replace '  - how do I host this agent\?', '  - hosting: how do I host this agent?') -Encoding UTF8 -NoNewline
+            Edit-Skill $root 'maf-architecture-mapping' '  - how do I host this agent\?' '  - hosting: how do I host this agent?'
+        } }
+    @{ Check = 'frontmatter-schema'; Defect = "' #' inside the description - a host would truncate there"; Expect = 'YAML comment'; Mutate = {
+            param($root)
+            Edit-Skill $root 'agentic-architecture-router' 'decisions before implementation - ' 'decisions #before implementation - '
+        } }
+    @{ Check = 'frontmatter-schema'; Defect = "a metadata value that is a YAML alias (*missing)"; Expect = 'YAML indicator'; Mutate = {
+            param($root)
+            Edit-Skill $root 'agentic-architecture-router' 'author: Alon Fliess' 'author: *missing'
+        } }
+    @{ Check = 'frontmatter-schema'; Defect = "a when_to_use item opening a flow sequence ([unterminated)"; Expect = 'YAML indicator'; Mutate = {
+            param($root)
+            Edit-Skill $root 'agentic-architecture-router' '  - should this be an agent\?' '  - [unterminated'
+        } }
+    @{ Check = 'frontmatter-schema'; Defect = "'key:value' with no space after the colon"; Expect = 'mapping entry'; Mutate = {
+            param($root)
+            Edit-Skill $root 'agentic-architecture-router' 'license: MIT' 'license:MIT'
+        } }
+    @{ Check = 'frontmatter-schema'; Defect = "'Disallowed-Tools' differing from the contract key only by case"; Expect = 'disallowed-tools missing'; Mutate = {
+            param($root)
+            Edit-Skill $root 'agentic-architecture-router' 'disallowed-tools:' 'Disallowed-Tools:'
+        } }
+    @{ Check = 'frontmatter-schema'; Defect = "a required tool name in the wrong case (write)"; Expect = "missing 'Write'"; Mutate = {
+            param($root)
+            Edit-Skill $root 'agentic-architecture-router' '  - Write$' '  - write'
+        } }
+    @{ Check = 'frontmatter-schema'; Defect = 'a duplicated top-level key'; Expect = 'duplicate key'; Mutate = {
+            param($root)
+            Edit-Skill $root 'agentic-architecture-router' 'license: MIT' "license: MIT`nlicense: MIT"
+        } }
+    @{ Check = 'frontmatter-schema'; Defect = 'a duplicated metadata key'; Expect = 'duplicate key'; Mutate = {
+            param($root)
+            Edit-Skill $root 'agentic-architecture-router' '  version: 1.0.0' "  version: 1.0.0`n  version: 1.0.0"
+        } }
+    @{ Check = 'frontmatter-schema'; Defect = 'a comment line inside the frontmatter'; Expect = 'comments are not part'; Mutate = {
+            param($root)
+            Edit-Skill $root 'agentic-architecture-router' 'license: MIT' "# a note`nlicense: MIT"
         } }
     @{ Check = 'markdown-lint'; Defect = 'a reference file with a heading that has no space after the hash'; Requires = 'markdownlint'; Mutate = {
             param($root)
@@ -192,6 +267,53 @@ $cases = @(
     @{ Check = 'markdown-lint'; Defect = 'the package lint config removed'; Requires = 'markdownlint'; Mutate = {
             param($root)
             Remove-Item -LiteralPath (Join-Path $root '.markdownlint.json') -Force
+        } }
+
+    # Probe cases exercise a function directly rather than a package copy. The install record enters
+    # public history, so the token mask must be proven, not assumed: a planted token must come out as ***.
+    @{ Check = 'install-record-mask'; Defect = 'the token VALUE planted in three unrelated log lines'; Probe = {
+            . (Join-Path $PSScriptRoot 'Protect-Secret.ps1')
+            $token = 'not-a-github-shape-' + [guid]::NewGuid().ToString('N')
+            Test-MaskProbe -Planted @(
+                "Cloning into https://x-access-token:${token}@github.com/o/r.git",
+                "GH_TOKEN=${token}",
+                "some tool echoed ${token} in the middle of a sentence"
+            ) -Secret $token -MaskSecret $true
+        } }
+    # Each token family is planted in ORDINARY prose, so only its own shape rule can mask it - inside a
+    # URL the credential rule would mask it regardless (co-review finding, round 2). Output count and
+    # the masked marker are asserted too, so a function returning nothing cannot pass.
+    @{ Check = 'install-record-mask'; Defect = 'a classic ghp_ token the run was NOT told about, in plain prose'; Probe = {
+            . (Join-Path $PSScriptRoot 'Protect-Secret.ps1')
+            $token = 'ghp_' + ('A1b2C3d4' * 5)
+            Test-MaskProbe -Planted @("value ${token} appeared", "${token}") -Secret $token -MaskSecret $false
+        } }
+    @{ Check = 'install-record-mask'; Defect = 'a fine-grained github_pat_ token the run was NOT told about, in plain prose'; Probe = {
+            . (Join-Path $PSScriptRoot 'Protect-Secret.ps1')
+            $token = 'github_pat_' + ('Zz9_' * 8)
+            Test-MaskProbe -Planted @("value ${token} appeared") -Secret $token -MaskSecret $false
+        } }
+    # The RESULT parser's failure path is never exercised by a passing run, so it is exercised here.
+    @{ Check = 'install-record-parse'; Defect = 'a FAILING result line with every field, round-tripped intact'; Probe = {
+            . (Join-Path $PSScriptRoot 'ConvertFrom-InstallResult.ps1')
+            $r = ConvertFrom-InstallResult -Line 'RESULT path=copilot-cli blocking=yes status=fail reason=over-limit-61000ms-gt-60000ms elapsed_ms=61000 skills=1/2'
+            $ok = ($r.status -ceq 'fail') -and ($r.reason -ceq 'over-limit-61000ms-gt-60000ms') -and ($r.elapsed_ms -ceq '61000') -and ($r.skills -ceq '1/2') -and ($r.blocking -ceq 'yes')
+            [pscustomobject]@{ Proven = $ok; Status = if ($ok) { 'fields intact' } else { "fields mangled: $($r | ConvertTo-Json -Compress)" } }
+        } }
+    @{ Check = 'install-record-parse'; Defect = 'a result line whose status contains a space (the round-1 shape)'; Probe = {
+            . (Join-Path $PSScriptRoot 'ConvertFrom-InstallResult.ps1')
+            try { ConvertFrom-InstallResult -Line 'RESULT path=x blocking=yes status=fail(exit 1) elapsed_ms=5 skills=0/2' | Out-Null; [pscustomobject]@{ Proven = $false; Status = 'accepted a malformed line silently' } }
+            catch { [pscustomobject]@{ Proven = $true; Status = 'rejected' } }
+        } }
+    @{ Check = 'install-record-parse'; Defect = 'a result line missing the reason field'; Probe = {
+            . (Join-Path $PSScriptRoot 'ConvertFrom-InstallResult.ps1')
+            try { ConvertFrom-InstallResult -Line 'RESULT path=x blocking=yes status=pass elapsed_ms=5 skills=2/2' | Out-Null; [pscustomobject]@{ Proven = $false; Status = 'accepted a line missing a field' } }
+            catch { [pscustomobject]@{ Proven = $true; Status = 'rejected' } }
+        } }
+    @{ Check = 'install-record-mask'; Defect = 'an arbitrary credential inside an x-access-token URL, no shape match'; Probe = {
+            . (Join-Path $PSScriptRoot 'Protect-Secret.ps1')
+            $token = 'opaque.' + [guid]::NewGuid().ToString('N')
+            Test-MaskProbe -Planted @("Cloning https://x-access-token:${token}@github.com/o/r.git") -Secret $token -MaskSecret $false
         } }
 )
 
@@ -209,15 +331,33 @@ foreach ($case in $cases) {
         })
         continue
     }
+    if ($case.ContainsKey('Probe')) {
+        $outcome = & $case.Probe
+        $rows.Add([pscustomobject]@{
+            Check   = $case.Check
+            Defect  = $case.Defect
+            Status  = $outcome.Status
+            Proven  = [bool]$outcome.Proven
+            Skipped = $false
+        })
+        continue
+    }
     $copy = New-PackageCopy -Source $PackageRoot
     try {
         & $case.Mutate $copy
-        $status = Get-CheckStatus -Root $copy -Check $case.Check
+        $result = Get-CheckStatus -Root $copy -Check $case.Check
+        $proven = ($result.Status -eq 'FAIL')
+        $status = $result.Status
+        if ($proven -and $case.ContainsKey('Expect') -and $result.Detail -notlike "*$($case.Expect)*") {
+            # It failed, but not for the reason this case exists to prove.
+            $proven = $false
+            $status = "FAIL for another reason: $($result.Detail)"
+        }
         $rows.Add([pscustomobject]@{
             Check   = $case.Check
             Defect  = $case.Defect
             Status  = $status
-            Proven  = ($status -eq 'FAIL')
+            Proven  = $proven
             Skipped = $false
         })
     }
@@ -245,7 +385,7 @@ if ($skipped.Count -gt 0) {
 
 if ($unproven.Count -gt 0) {
     Write-Output ''
-    Write-Output 'These checks did not fail under their own defect, so they are not implemented:'
+    Write-Output 'These checks did not catch their own defect, so they are not implemented:'
     foreach ($u in $unproven) { Write-Output "  - $($u.Check): $($u.Defect) -> reported $($u.Status)" }
     exit 1
 }

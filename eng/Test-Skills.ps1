@@ -140,7 +140,8 @@ function Test-FrontmatterContract {
         }
 
         foreach ($tool in $script:RequiredDisallowedTools) {
-            if ($tool -notin $fm.DisallowedTools) { $problems.Add("${rel}: disallowed-tools missing '$tool'") }
+            # Ordinal: a host matches tool names exactly, so 'write' would not restrict Write.
+            if ($tool -cnotin $fm.DisallowedTools) { $problems.Add("${rel}: disallowed-tools missing '$tool'") }
         }
 
         foreach ($unexpected in $fm.UnknownKeys) {
