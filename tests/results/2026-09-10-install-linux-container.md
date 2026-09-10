@@ -1,18 +1,18 @@
 # Install verification - 2026-09-10
 
 **Outcome**: PASS
-**Recorded**: 2026-09-10 09:16:24Z
+**Recorded**: 2026-09-10 09:50:37Z
 **Source**: `alonf/agentic-architecture-skills` (installed from GitHub, as the README documents)
 **Machine**: clean container, linux/x86_64 engine 29.4.0, base image `node:22.23.2-bookworm-slim`, fresh non-root user
 **Hosts**: Claude Code 2.1.267, GitHub Copilot CLI 1.0.83, skills CLI 1.5.25
-**Limit**: 60 s per host (SC-001), both skills present after install
+**Limit**: 60 s per host (SC-001); both skills on disk in the install location AND named by the host's own inventory
 
-| Path | Blocking | Status | Reason | Install time | Skills found |
-| ---- | -------- | ------ | ------ | ------------ | ------------ |
-| claude-code | yes | pass | - | 2.7 s | 2/2 |
-| copilot-cli | yes | pass | - | 3.2 s | 2/2 |
-| copilot-cli-direct | no | pass | - | 3.1 s | 2/2 |
-| skills-cli | no | pass | - | 2.4 s | 2/2 |
+| Path | Blocking | Status | Reason | Install time | Skills on disk | Host inventory |
+| ---- | -------- | ------ | ------ | ------------ | -------------- | -------------- |
+| claude-code | yes | pass | - | 2 s | 2/2 | 2/2 |
+| copilot-cli | yes | pass | - | 2.7 s | 2/2 | 2/2 |
+| copilot-cli-direct | no | pass | - | 3.2 s | 2/2 | 2/2 |
+| skills-cli | no | pass | - | 2.9 s | 2/2 | 2/2 |
 
 ## Log
 
@@ -58,14 +58,14 @@ Installing plugin "agentic-architecture@agentic-architecture-skills"...✔ Succe
   details:
   details:   On-invoke cost is paid each time a skill or agent fires.
   details:   Token counts are estimates and may differ from actual usage.
-RESULT path=claude-code blocking=yes status=pass reason=- elapsed_ms=2652 skills=2/2
+RESULT path=claude-code blocking=yes status=pass reason=- elapsed_ms=1967 skills=2/2 inventory=2/2
 
 === copilot-cli: plugin marketplace add + plugin install
 Marketplace "agentic-architecture-skills" added successfully.
 Plugin "agentic-architecture" installed successfully. Installed 2 skills.
   list: Installed plugins:
   list:   • agentic-architecture@agentic-architecture-skills (v1.0.0)
-RESULT path=copilot-cli blocking=yes status=pass reason=- elapsed_ms=3228 skills=2/2
+RESULT path=copilot-cli blocking=yes status=pass reason=- elapsed_ms=2738 skills=2/2 inventory=2/2
 
 === copilot-cli-direct: plugin install owner/repo into a second clean home
 Plugin "agentic-architecture" installed successfully. Installed 2 skills.
@@ -73,7 +73,7 @@ Plugin "agentic-architecture" installed successfully. Installed 2 skills.
 Warning: Direct plugin installs (repos, URLs, local paths) are deprecated. Only plugin@marketplace installs will be supported in a future release.
   list: Installed plugins:
   list:   • agentic-architecture (v1.0.0)
-RESULT path=copilot-cli-direct blocking=no status=pass reason=- elapsed_ms=3085 skills=2/2
+RESULT path=copilot-cli-direct blocking=no status=pass reason=- elapsed_ms=3248 skills=2/2 inventory=2/2
 
 === skills-cli: npx skills add (--all, global) into a third clean home
 
@@ -147,8 +147,7 @@ RESULT path=copilot-cli-direct blocking=no status=pass reason=- elapsed_ms=3085 
   list:   Agents: AiderDesk, AstrBot, Autohand Code CLI, Augment, IBM Bob +51 more  Source: alonf/agentic-architecture-skills
   list: maf-architecture-mapping    ~/.agents/skills/maf-architecture-mapping
   list:   Agents: AiderDesk, AstrBot, Autohand Code CLI, Augment, IBM Bob +51 more  Source: alonf/agentic-architecture-skills
-  list:
-RESULT path=skills-cli blocking=no status=pass reason=- elapsed_ms=2414 skills=2/2
+RESULT path=skills-cli blocking=no status=pass reason=- elapsed_ms=2897 skills=2/2 inventory=2/2
 
 === summary
 install verification: PASS (blocking paths all under 60000ms with 2/2 skills)

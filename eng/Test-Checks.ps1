@@ -259,6 +259,36 @@ $cases = @(
             param($root)
             Edit-Skill $root 'agentic-architecture-router' 'license: MIT' "# a note`nlicense: MIT"
         } }
+    # Non-string spellings: a YAML consumer receives null/boolean/number where the contract says string.
+    @{ Check = 'frontmatter-schema'; Defect = "a when_to_use item that is 'null'"; Expect = 'null, boolean or number'; Mutate = {
+            param($root)
+            Edit-Skill $root 'agentic-architecture-router' '  - should this be an agent\?' '  - null'
+        } }
+    @{ Check = 'frontmatter-schema'; Defect = "a when_to_use item that is 'true'"; Expect = 'null, boolean or number'; Mutate = {
+            param($root)
+            Edit-Skill $root 'agentic-architecture-router' '  - should this be an agent\?' '  - true'
+        } }
+    @{ Check = 'frontmatter-schema'; Defect = "author: null"; Expect = 'null, boolean or number'; Mutate = {
+            param($root)
+            Edit-Skill $root 'agentic-architecture-router' 'author: Alon Fliess' 'author: null'
+        } }
+    @{ Check = 'frontmatter-schema'; Defect = "a version that YAML reads as a float (1.0)"; Expect = 'null, boolean or number'; Mutate = {
+            param($root)
+            Edit-Skill $root 'agentic-architecture-router' '  version: 1\.0\.0' '  version: 1.0'
+        } }
+    @{ Check = 'frontmatter-schema'; Defect = 'an empty when_to_use item'; Expect = 'value is empty'; Mutate = {
+            param($root)
+            Edit-Skill $root 'agentic-architecture-router' '  - should this be an agent\?' '  - '
+        } }
+    # Manifest sync must be case-sensitive: JSON keys are.
+    @{ Check = 'manifest-sync'; Defect = 'a manifest key changed only in case ("name" -> "Name")'; Expect = 'differs from generated'; Mutate = {
+            param($root)
+            $p = Join-Path $root '.claude-plugin/marketplace.json'
+            $t = Get-Content -LiteralPath $p -Raw -Encoding UTF8
+            $edited = $t -creplace '"name": "agentic-architecture-skills"', '"Name": "agentic-architecture-skills"'
+            if ($edited -ceq $t) { throw 'fixture matched nothing' }
+            Set-Content -LiteralPath $p -Value $edited -Encoding UTF8 -NoNewline
+        } }
     @{ Check = 'markdown-lint'; Defect = 'a reference file with a heading that has no space after the hash'; Requires = 'markdownlint'; Mutate = {
             param($root)
             $p = Join-Path $root 'skills/agentic-architecture-router/references/broken.md'
@@ -296,19 +326,60 @@ $cases = @(
     # The RESULT parser's failure path is never exercised by a passing run, so it is exercised here.
     @{ Check = 'install-record-parse'; Defect = 'a FAILING result line with every field, round-tripped intact'; Probe = {
             . (Join-Path $PSScriptRoot 'ConvertFrom-InstallResult.ps1')
-            $r = ConvertFrom-InstallResult -Line 'RESULT path=copilot-cli blocking=yes status=fail reason=over-limit-61000ms-gt-60000ms elapsed_ms=61000 skills=1/2'
-            $ok = ($r.status -ceq 'fail') -and ($r.reason -ceq 'over-limit-61000ms-gt-60000ms') -and ($r.elapsed_ms -ceq '61000') -and ($r.skills -ceq '1/2') -and ($r.blocking -ceq 'yes')
+            $r = ConvertFrom-InstallResult -Line 'RESULT path=copilot-cli blocking=yes status=fail reason=over-limit-61000ms-gt-60000ms elapsed_ms=61000 skills=1/2 inventory=0/2'
+            $ok = ($r.status -ceq 'fail') -and ($r.reason -ceq 'over-limit-61000ms-gt-60000ms') -and ($r.elapsed_ms -ceq '61000') -and ($r.skills -ceq '1/2') -and ($r.inventory -ceq '0/2') -and ($r.blocking -ceq 'yes')
             [pscustomobject]@{ Proven = $ok; Status = if ($ok) { 'fields intact' } else { "fields mangled: $($r | ConvertTo-Json -Compress)" } }
+        } }
+    @{ Check = 'install-record-parse'; Defect = 'a tab-separated result line parses like a space-separated one'; Probe = {
+            . (Join-Path $PSScriptRoot 'ConvertFrom-InstallResult.ps1')
+            $r = ConvertFrom-InstallResult -Line "RESULT`tpath=claude-code`tblocking=yes`tstatus=pass`treason=-`telapsed_ms=5`tskills=2/2`tinventory=2/2"
+            [pscustomobject]@{ Proven = ($r.path -ceq 'claude-code' -and $r.inventory -ceq '2/2'); Status = 'parsed' }
         } }
     @{ Check = 'install-record-parse'; Defect = 'a result line whose status contains a space (the round-1 shape)'; Probe = {
             . (Join-Path $PSScriptRoot 'ConvertFrom-InstallResult.ps1')
-            try { ConvertFrom-InstallResult -Line 'RESULT path=x blocking=yes status=fail(exit 1) elapsed_ms=5 skills=0/2' | Out-Null; [pscustomobject]@{ Proven = $false; Status = 'accepted a malformed line silently' } }
+            try { ConvertFrom-InstallResult -Line 'RESULT path=x blocking=yes status=fail(exit 1) reason=- elapsed_ms=5 skills=0/2 inventory=0/2' | Out-Null; [pscustomobject]@{ Proven = $false; Status = 'accepted a malformed line silently' } }
             catch { [pscustomobject]@{ Proven = $true; Status = 'rejected' } }
         } }
-    @{ Check = 'install-record-parse'; Defect = 'a result line missing the reason field'; Probe = {
+    @{ Check = 'install-record-parse'; Defect = 'a result line missing the inventory field'; Probe = {
             . (Join-Path $PSScriptRoot 'ConvertFrom-InstallResult.ps1')
-            try { ConvertFrom-InstallResult -Line 'RESULT path=x blocking=yes status=pass elapsed_ms=5 skills=2/2' | Out-Null; [pscustomobject]@{ Proven = $false; Status = 'accepted a line missing a field' } }
+            try { ConvertFrom-InstallResult -Line 'RESULT path=x blocking=yes status=pass reason=- elapsed_ms=5 skills=2/2' | Out-Null; [pscustomobject]@{ Proven = $false; Status = 'accepted a line missing a field' } }
             catch { [pscustomobject]@{ Proven = $true; Status = 'rejected' } }
+        } }
+    @{ Check = 'install-record-parse'; Defect = 'a bare RESULT line with no fields'; Probe = {
+            . (Join-Path $PSScriptRoot 'ConvertFrom-InstallResult.ps1')
+            try { ConvertFrom-InstallResult -Line 'RESULT' | Out-Null; [pscustomobject]@{ Proven = $false; Status = 'accepted a bare line' } }
+            catch { [pscustomobject]@{ Proven = $true; Status = 'rejected' } }
+        } }
+    # Aggregation: the container exiting 0 is not evidence; the expected set must be complete.
+    @{ Check = 'install-record-verdict'; Defect = 'no RESULT lines at all, container exit 0'; Probe = {
+            . (Join-Path $PSScriptRoot 'ConvertFrom-InstallResult.ps1')
+            $v = Test-InstallResultSet -Results @() -ExpectedPaths @('claude-code', 'copilot-cli') -ContainerExitCode 0
+            [pscustomobject]@{ Proven = (-not $v.Pass -and $v.Reasons.Count -eq 2); Status = if ($v.Pass) { 'PASSED an empty run' } else { 'rejected' } }
+        } }
+    @{ Check = 'install-record-verdict'; Defect = 'one expected path missing, the others passing'; Probe = {
+            . (Join-Path $PSScriptRoot 'ConvertFrom-InstallResult.ps1')
+            $ok = ConvertFrom-InstallResult -Line 'RESULT path=claude-code blocking=yes status=pass reason=- elapsed_ms=5 skills=2/2 inventory=2/2'
+            $v = Test-InstallResultSet -Results @($ok) -ExpectedPaths @('claude-code', 'copilot-cli') -ContainerExitCode 0
+            [pscustomobject]@{ Proven = (-not $v.Pass); Status = if ($v.Pass) { 'PASSED with a path missing' } else { 'rejected' } }
+        } }
+    @{ Check = 'install-record-verdict'; Defect = 'a path reported twice'; Probe = {
+            . (Join-Path $PSScriptRoot 'ConvertFrom-InstallResult.ps1')
+            $ok = ConvertFrom-InstallResult -Line 'RESULT path=claude-code blocking=yes status=pass reason=- elapsed_ms=5 skills=2/2 inventory=2/2'
+            $v = Test-InstallResultSet -Results @($ok, $ok) -ExpectedPaths @('claude-code') -ContainerExitCode 0
+            [pscustomobject]@{ Proven = (-not $v.Pass); Status = if ($v.Pass) { 'PASSED a duplicate' } else { 'rejected' } }
+        } }
+    @{ Check = 'install-record-verdict'; Defect = 'a blocking path failed while the container exited 0'; Probe = {
+            . (Join-Path $PSScriptRoot 'ConvertFrom-InstallResult.ps1')
+            $bad = ConvertFrom-InstallResult -Line 'RESULT path=claude-code blocking=yes status=fail reason=inventory-lists-0-of-2 elapsed_ms=5 skills=2/2 inventory=0/2'
+            $v = Test-InstallResultSet -Results @($bad) -ExpectedPaths @('claude-code') -ContainerExitCode 0
+            [pscustomobject]@{ Proven = (-not $v.Pass); Status = if ($v.Pass) { 'PASSED a failed blocking path' } else { 'rejected' } }
+        } }
+    @{ Check = 'install-record-verdict'; Defect = 'a complete passing set (control: must PASS)'; Probe = {
+            . (Join-Path $PSScriptRoot 'ConvertFrom-InstallResult.ps1')
+            $a = ConvertFrom-InstallResult -Line 'RESULT path=claude-code blocking=yes status=pass reason=- elapsed_ms=5 skills=2/2 inventory=2/2'
+            $b = ConvertFrom-InstallResult -Line 'RESULT path=copilot-cli blocking=yes status=pass reason=- elapsed_ms=5 skills=2/2 inventory=2/2'
+            $v = Test-InstallResultSet -Results @($a, $b) -ExpectedPaths @('claude-code', 'copilot-cli') -ContainerExitCode 0
+            [pscustomobject]@{ Proven = $v.Pass; Status = if ($v.Pass) { 'passes' } else { "rejected a good set: $($v.Reasons -join '; ')" } }
         } }
     @{ Check = 'install-record-mask'; Defect = 'an arbitrary credential inside an x-access-token URL, no shape match'; Probe = {
             . (Join-Path $PSScriptRoot 'Protect-Secret.ps1')

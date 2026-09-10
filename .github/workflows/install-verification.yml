@@ -28,12 +28,15 @@ jobs:
         env:
           # Read access to this repository, so the hosts can clone it while it is private.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pwsh -File ./eng/Test-Install.ps1 -Source "${{ github.repository }}"
+        # The record goes to a path outside the checkout: the tree already holds committed PASS records,
+        # and uploading a glob over them would present an old PASS as this run's evidence.
+        run: pwsh -File ./eng/Test-Install.ps1 -Source "${{ github.repository }}" -OutputPath "$RUNNER_TEMP/install-verification/current-run.md"
 
-      - name: Keep the recorded run
+      - name: Keep this run's record
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: install-verification
-          path: tests/results/*-install-linux-container.md
-          if-no-files-found: warn
+          path: ${{ runner.temp }}/install-verification/current-run.md
+          # The driver writes a record even when it fails; a missing file means it never ran at all.
+          if-no-files-found: error

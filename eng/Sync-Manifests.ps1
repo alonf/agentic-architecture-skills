@@ -132,7 +132,8 @@ foreach ($relative in $manifests.Keys | Sort-Object) {
             continue
         }
         $actual = (Get-Content -LiteralPath $target -Raw -Encoding UTF8).Replace("`r`n", "`n")
-        if ($actual -ne $expected) { $drift.Add("${relative}: differs from generated output") }
+        # -cne: JSON property names are case-sensitive, and PowerShell's -ne is not.
+        if ($actual -cne $expected) { $drift.Add("${relative}: differs from generated output") }
         continue
     }
 

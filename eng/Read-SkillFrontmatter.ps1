@@ -37,6 +37,12 @@ $script:KnownMetadataKeys = @('author', 'version', 'homepage')
 # a directive or a reserved indicator. A value starting with one of these is outside this contract.
 $script:PlainScalarForbiddenStart = [char[]]'-?:,[]{}#&*!|>''"%@`'
 
+# Spellings a YAML parser resolves to something other than a string: null (1.2 core), booleans (1.2
+# core plus the 1.1 forms some parsers still honour), integers and floats. Every value in this contract
+# is a string, so a host receiving null for an author or true for a request has not received the value.
+$script:NonStringScalarPattern = '^(?i:null|~|true|false|yes|no|on|off|y|n|[-+]?\.inf|\.nan)$' +
+    '|^[-+]?[0-9]+$|^0o[0-7]+$|^0x[0-9a-fA-F]+$|^[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?$'
+
 function Assert-PlainScalar {
     <#
       Every value in this frontmatter is an unquoted YAML plain scalar. This function defines the
@@ -50,6 +56,9 @@ function Assert-PlainScalar {
                                                                    block scalar, quote, comment...
         - a tab anywhere                                         - never legal in this frontmatter
 
+        - a spelling YAML resolves to null, boolean or number   - the host gets a non-string
+        - an empty value                                         - a host gets null, not ''
+
       Splitting on the first colon, as this parser does, cannot see any of these on its own - it
       accepted 'USE FOR: ...' for two commits while every real YAML parser refused it. So the subset is
       asserted here, where the value is read. Comments are not part of the contract at all, so a legal
@@ -59,7 +68,12 @@ function Assert-PlainScalar {
         [Parameter(Mandatory)][AllowEmptyString()][string] $Value,
         [Parameter(Mandatory)][string] $Where
     )
-    if ($Value.Length -eq 0) { return }
+    if ($Value.Length -eq 0) {
+        throw "$Where`: value is empty; a YAML parser reads that as null, not as a string."
+    }
+    if ($Value -match $script:NonStringScalarPattern) {
+        throw "$Where`: value '$Value' is a YAML null, boolean or number spelling; every value in this frontmatter is a string."
+    }
     if ($Value.Contains(': ') -or $Value.Contains(":`t") -or $Value.EndsWith(':')) {
         throw "$Where`: value contains ': ' (or a trailing ':'), which is a mapping indicator, not part of an unquoted YAML plain scalar."
     }
