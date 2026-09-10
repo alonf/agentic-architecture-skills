@@ -1,0 +1,8 @@
+# Deliverable line-ending policy.
+# Checks assert per-file line caps and exact terminal lines; CRLF/LF churn would
+# both mask real diffs and make those assertions platform-dependent.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.zip binary

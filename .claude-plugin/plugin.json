@@ -1,0 +1,10 @@
+{
+  "name": "agentic-architecture",
+  "description": "Decide the least-autonomous mechanism a requirement needs, then map an approved decision onto Microsoft Agent Framework constructs in .NET.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Alon Fliess"
+  },
+  "homepage": "https://github.com/alonf/agentic-architecture-skills",
+  "license": "MIT"
+}

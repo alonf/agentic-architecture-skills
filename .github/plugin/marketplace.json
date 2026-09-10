@@ -1,0 +1,14 @@
+{
+  "name": "agentic-architecture-skills",
+  "version": "1.0.0",
+  "owner": {
+    "name": "Alon Fliess"
+  },
+  "plugins": [
+    {
+      "name": "agentic-architecture",
+      "source": "./",
+      "description": "Two skills: agentic-architecture-router and maf-architecture-mapping."
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+# The single definition of "this package is valid" is eng/Test-Skills.ps1. This workflow installs the
+# one declared CI tool, invokes that script, and adds no checks of its own, so what fails here fails
+# identically on a maintainer's machine. A check that exists only in CI cannot be run before a push.
+#
+# Everything external is pinned to an exact version: the action by commit SHA, the lint tool by npm
+# version. The README's "Development tooling" section lists the same tool and version.
+
+name: validate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # The only external tool at 1.0. Also named in README.md; change both together.
+  MARKDOWNLINT_CLI_VERSION: 0.49.1
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install markdownlint-cli (pinned)
+        run: npm install --global "markdownlint-cli@${MARKDOWNLINT_CLI_VERSION}"
+
+      - name: Validate the package
+        run: pwsh -File ./eng/Test-Skills.ps1

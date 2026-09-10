@@ -1,0 +1,15 @@
+# The published package installs nothing and builds nothing, so this file stays
+# short by design. Anything listed here is local noise, never build output that
+# the package depends on.
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# Local test scratch. Recorded manual-run evidence under tests/results/ IS
+# committed - it is the evidence the README points at - so only scratch is ignored.
+tests/results/scratch/
+tests/**/*.local.*
