@@ -159,3 +159,8 @@ decision. The limitations below carry to feature 002 with the book alignment.
 These are scoped measurements, not new trigger-corpus recall or enforcement figures, and
 do not erase earlier failures. The authorization invention grants no actual authority;
 the authority-chain and card-shape targets remain unchanged in the skills.
+
+Final-content installation from a fresh clone of public export `d051684` passed on
+2026-09-14 UTC: Claude Code 2.1.267 in 10.4 s and Copilot CLI 1.0.83 in 3.6 s, with both
+skills listed and the installed revision and digest matched. See the
+[revision-bound install record](tests/results/2026-09-14-final-export-install.md).
