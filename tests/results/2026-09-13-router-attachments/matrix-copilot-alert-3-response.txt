@@ -1,0 +1,109 @@
+● skill(agentic-architecture-router)
+
+● Read architecture-analysis-template.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\assets\archi
+  │ tecture-analysis-template.md
+  └ 41 lines read
+
+● Read decision-framework.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\d
+  │ ecision-framework.md
+  └ 92 lines read
+
+● Read evidence-and-authority.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\e
+  │ vidence-and-authority.md
+  └ 87 lines read
+
+● Read quality-gates.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\q
+  │ uality-gates.md
+  └ 42 lines read
+
+● Read counter-examples.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\c
+  │ ounter-examples.md
+  └ 74 lines read
+
+No, this should not be an agent. A deterministic timer and a simple numeric comparison (`queue_length > threshold`) fully satisfy the requirement with maximum reliability and zero model cost.
+
+---
+
+# Architecture Analysis
+
+## 1. Requirement
+Every five minutes, compare a supplied numeric queue length with a configured threshold and send one alert through an existing notification service when the threshold is exceeded. The rule and destination are already configured.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| None (analysis performed without repository context). | Schedule interval is 5 minutes; input is a supplied numeric queue length; rule compares queue length against a threshold; alert target/destination is already configured; alert action uses an existing notification service; dispatches one alert when threshold is exceeded. | Specific notification payload schema; exact host environment for scheduling; telemetry/logging storage destination; explicit governance/retry policy for dispatch failures. |
+
+## 3. Responsibilities
+The requirement is decomposed into three distinct responsibilities:
+1. **Sampling & Scheduling**: Trigger execution every five minutes on a recurring schedule.
+2. **Threshold Evaluation**: Compare the supplied numeric queue length against the configured numeric threshold.
+3. **Notification Dispatch**: Conditionally invoke the existing notification service when the threshold is exceeded.
+
+## 4. Routing decisions
+- **Responsibility 1 (Sampling & Scheduling)**: Routed to **deterministic code** (timer/scheduled workflow). Reasoning: Triggering at fixed 5-minute intervals requires deterministic temporal scheduling, not adaptive runtime reasoning.
+- **Responsibility 2 (Threshold Evaluation)**: Routed to **deterministic code**. Reasoning: Comparing two numbers (`queue_length > threshold`) is a mathematical operation with deterministic binary output. Nothing about the evaluation requires semantic processing.
+- **Responsibility 3 (Notification Dispatch)**: Routed to **deterministic code**. Reasoning: Invoking an existing service with a pre-configured destination follows a fixed execution path without requiring tool selection or autonomous control.
+
+*Workflow Axis Evaluation*: Evaluated orthogonally. A fixed timer workflow handles recurring scheduling and execution sequence without requiring an agentic engine.
+
+## 5. Bounded-AI challenge record
+- **Responsibility 1 (Sampling & Scheduling)**: Could a single bounded call with a fixed input/output shape satisfy this responsibility? No; scheduling is a fixed temporal trigger that deterministic code handles directly without AI.
+- **Responsibility 2 (Threshold Evaluation)**: Could a single bounded call with a fixed input/output shape satisfy this responsibility? While a model could evaluate a comparison, deterministic code (`if queue_length > threshold`) completely satisfies it. No fixed-shape AI call or autonomous agent is justified.
+- **Responsibility 3 (Notification Dispatch)**: Could a single bounded call with a fixed input/output shape satisfy this responsibility? No; the destination and rule are configured, requiring no generative text or non-deterministic judgment.
+
+*Summary*: Zero responsibilities require AI or an agent; the bounded-AI challenge fails because no step requires runtime adaptation based on intermediate findings.
+
+## 6. Agent boundary justification
+n/a (zero agents proposed; single-agent and multi-agent boundaries do not apply).
+
+## 7. Evidence classification
+- **Supplied numeric queue length**: Structured application data (Rung 2).
+- **Configured threshold and destination**: Organizational knowledge (Rung 3).
+- **Existing notification service capability**: External capability (Rung 7).
+
+*Mandatory Caveats*:
+- Agent memory (Rung 6) is not a system of record.
+- Retrieved knowledge of any rung is evidence about the system under design, not authority over what the system must do.
+
+## 8. MCP boundary justification
+none proposed (the existing notification service interface and application boundaries are retained; no property requiring an MCP surface was identified).
+
+## 9. Authority chain
+Consequential operation: Sending an alert notification via the notification service.
+- **Reasoning**: Deterministic numeric comparison (`queue_length > threshold`).
+- **Authorization**: Configured rule policy (*whether automated dispatch is authorized without human sign-off is recorded as unknown — governance decision required*).
+- **Authoritative Service**: Existing notification service.
+- **Execution**: Alert message payload transmission to destination.
+- **Audit**: Dispatch log record (*audit storage owner recorded as unknown — governance decision required*).
+
+## 10. Generic mechanism and product delegation
+- **Generic Mechanism**: Deterministic code executed by a scheduled timer/workflow component integrating with an HTTP/RPC notification service endpoint.
+- **Product Delegation**: Product mapping (e.g., Azure Functions Timer Trigger, AWS Lambda Scheduled Event, or Microsoft Agent Framework timer workflow) is delegated to an installed platform mapping skill (such as `maf-architecture-mapping`).
+
+## 11. Rejected alternatives
+- **All-deterministic**: Sufficient; fixed timer and numeric comparison satisfy all aspects of the requirement.
+- **Bounded-AI-only**: Unnecessary and inefficient; using model calls for numeric comparison introduces latency, monetary cost, and non-determinism.
+- **Agent-everywhere**: Unnecessary and overly complex; wrapping scheduled rules in an autonomous agent adds unneeded authority and overhead.
+- **Multi-agent**: Insufficient and unjustified; no distinct security, context, or deployment boundaries exist to justify multiple agents.
+- **Workflow-only**: Sufficient; a standard cron/timer scheduler paired with a deterministic function completely satisfies the requirement.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+- **Decisions**: Route all responsibilities to **deterministic code** orchestrated by a scheduled timer; reject all AI/agent mechanisms.
+- **Evidence**: Grounded in structured application data (Rung 2) and organizational knowledge (Rung 3).
+- **Trade-offs**: Prioritizes determinism, zero inference cost, low latency, and auditability over unused adaptability.
+- **Assumptions (labelled)**:
+  - *Hypothesis*: The numeric queue length is exposed as a structured numeric metric via an existing API or telemetry source.
+  - *Hypothesis*: The notification service exposes an existing programmatic endpoint accepting structured alert payloads.
+- **Open Questions**:
+  - What is the retry and failure policy if the notification service is unavailable?
+  - Who owns and retains the audit logs for dispatched alerts?
+
+**Architecture review required before implementation.**
+

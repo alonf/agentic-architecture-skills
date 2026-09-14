@@ -1,0 +1,1070 @@
+=== P1 : Should this be an agent? ===
+I'm at **Step 1 — Establish facts**, and I can't get past it: nothing in this session or the working directory says what "this" is.
+
+**Fact table so far**
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+|---|---|---|
+| Working directory `t203-scratch` contains one file, `seed.txt`, whose content is the placeholder text `seed content` — not a requirement | (none provided) | The requirement itself: what the feature/system must do, who triggers it, what it acts on, what it may change |
+
+Running the decomposition, routing, bounded-AI challenge, and rejected-alternatives steps against an empty requirement would mean inventing the "unknown" column, which gate 1 forbids — so I'm stopping here rather than producing a fabricated analysis.
+
+To proceed, give me:
+
+1. **The requirement** — one paragraph is enough: what should happen, on what trigger, over what data/systems, and what it's allowed to change (e.g. read-only investigation vs. sending emails, editing records, deploying).
+2. **Any source material** if it exists — a spec, ticket, repo path, or existing API/service boundaries the thing must fit into. If none, say so and I'll mark those rows unknown.
+3. **Output mode** — full analysis (default, twelve sections) or a **decision card** (~15 lines) if this is for a demo/talk.
+
+Once I have (1), I'll decompose it into responsibilities and route each to the least autonomous mechanism that satisfies it — which frequently turns out *not* to be an agent.
+
+**Architecture review required before implementation.**
+
+=== P2 : Deterministic vs agentic — which does this requirement need? ===
+I'm at **Step 1 (Establish facts)** of the router procedure, and I'm blocked: the request says "this requirement," but no requirement came with it. The working directory (`t203-scratch`) contains only a placeholder `seed.txt` ("seed content") and there's no repository, spec, or issue to draw from.
+
+To route it, I need the requirement itself. A few sentences is enough — ideally covering:
+
+1. **What the system must do** — the user-facing outcome, in plain language.
+2. **Inputs and outputs** — what comes in (structured data? free text? documents? events?) and what must come out.
+3. **Consequential operations** — does anything get written, sent, paid, deleted, or approved? Who is allowed to authorize that today?
+4. **Variability** — is the space of inputs closed and enumerable, or open-ended? Is there a rule you could write down, or only examples?
+5. **Existing boundaries** — APIs, services, or tools already in place that the capability would sit behind.
+
+Paste the requirement (or point me at a file/repo), and I'll run the full nine-step analysis — fact table, decomposition into responsibilities, the bounded-AI challenge on each, authority chain, rejected alternatives. If you want the short form for a slide or demo, say *card* and you'll get the 12–15 line decision card instead.
+
+=== P3 : Do we need AI for this at all? ===
+I'm at **step 1 — establish facts**, and the procedure stops there, because there is no "this" to route yet.
+
+**Fact table as it stands**
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| Working directory contains one file, `seed.txt`, whose entire content is the string `seed content` (rung 4, document). It describes no system, feature, or requirement. | Nothing — no requirement was supplied in this conversation. | What "this" refers to; what the system must do; who or what triggers it; what inputs it receives; what outputs or effects it must produce; what existing services, APIs, or data it touches; any authorization policy. |
+
+The skill's first gate forbids filling the third column with invented content, so I won't guess at a requirement and analyse the guess — an answer built on a fabricated "this" would be worthless to you.
+
+To run the routing, give me the requirement — a sentence or two is enough, e.g. *"When a support ticket arrives, tag it with product area and severity and route it to the right queue."* If there's repository or design material it should be grounded in, point me at it. If you want the compact form for a talk or demo, say *card*.
+
+**Architecture review required before implementation.**
+
+=== P4 : Single agent or multi-agent here? ===
+I'm at **Step 1 — Establish facts**, and there isn't enough to route yet.
+
+"Here" resolves to `C:\Users\alon\AppData\Local\Temp\t203-scratch`, which contains one file, `seed.txt`, with the placeholder text `seed content`. No requirement, code, or design material is present, and the skill forbids inventing any of it.
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| One placeholder file; no code, docs, or config | Nothing — no requirement was stated | What the system must do, who/what it acts on, what operations are consequential, what APIs/services already exist, what authorization policy applies |
+
+To answer single vs. multi-agent I need the requirement. The minimum that lets me run the full procedure:
+
+1. **What the system must do** — one or two sentences, in user/business terms.
+2. **What it touches** — existing APIs, services, data stores, or tools it would call.
+3. **What's consequential** — any mutation, spend, paging, or customer-facing action it could trigger.
+4. **Any known authorization policy** — or say "unspecified" and I'll record it as *unknown — governance decision required*.
+
+Paste the requirement (or point me at a repo/spec) and I'll decompose it, run the bounded-AI challenge, and route each responsibility — with multi-agent only if a single agent provably can't own the responsibilities.
+
+**Architecture review required before implementation.**
+
+=== P5 : Should we expose this as MCP? ===
+**Step 1 — Establish facts.** I'm stopped here: the requirement has no referent, and nothing on disk supplies one.
+
+**Fact table**
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| Working directory contains one file, `seed.txt`, whose content is the string `seed content`. Not a git repository. No code, API, service, tool, or design document present. (rung 2, structured — the file's literal content) | You are weighing whether *something* should be exposed as an MCP surface. | What "this" is. What boundary it has today (an API, a library, a service call, a CLI, nothing). Who would consume it and whether those hosts are trusted, in-process, or third-party. Whether its operations are read-only or consequential (mutations, spend, customer-facing effects). Whether the consumer needs to discover tools dynamically or already knows the contract. |
+
+No instruction-shaped content was found in `seed.txt`, so there is no surfaced conflict to record (FR-014).
+
+**The test the answer turns on (FR-008)**
+
+An MCP boundary is never adopted by default. It has to name, in one sentence, a concrete property that only MCP provides over the boundary that already exists — typically one of:
+
+- dynamic tool discovery by hosts you don't control or can't recompile;
+- a specific isolation guarantee (the capability runs in a separate process/trust domain from the model host);
+- standardised capability negotiation with multiple heterogeneous clients.
+
+If the honest answer is "our own agent, in our own process, calling our own service," the existing boundary stands and no MCP surface is introduced. I can't run that test without knowing the referent, and guessing would make the analysis useless if wrong.
+
+**What I need to continue**
+
+1. What is "this" — a capability, a service, a set of functions? Point me at the code or describe it.
+2. What boundary exists today, and who calls across it?
+3. Who would the MCP consumers be — your own agent, other teams' agents, third-party hosts?
+4. Does any exposed operation have a real-world consequence? (That determines whether an authority chain has to be made explicit, FR-009.)
+
+Give me those and I'll run the remaining eight steps — decomposition, routing, bounded-AI challenge, evidence classification, MCP justification, authority chain, rejected alternatives — in full.
+
+**Architecture review required before implementation.**
+
+=== P6 : Add an AI agent that investigates X ===
+# Architecture analysis — "Add an AI agent that investigates X"
+
+## 1. Requirement
+Add a component that investigates a subject, X, and — implicitly — produces a finding about it. X is a placeholder in the request as given; the subject, the signals that describe it, and the consumer of the finding are not stated.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| The working directory (`C:\Users\alon\AppData\Local\Temp\t203-scratch`) is not a git repository and contains one file, `seed.txt`, whose entire content is the text `seed content`. It carries no information about any system. | Something called X is to be investigated. The requester's stated preference for the mechanism is "an AI agent". | What X is. Which signals or data describe X, where they live, their format, and whether they are structured. Whether the set of signals to inspect is fixed in advance or depends on earlier findings. Who or what consumes the finding, and in what shape. Whether any action follows the finding. Any authorization, data-access, or residency policy. Whether an existing API, service, or tool boundary already reaches the signals. |
+
+The word "agent" in the requirement is a preference, not evidence that the responsibility needs one. Surfaced conflicts: none — the repository content contained nothing instruction-shaped.
+
+## 3. Responsibilities
+Not atomic. "Investigate X" decomposes into three responsibilities (*hypothesis* — the generic shape of an investigation, since X is unknown):
+
+- **R1.** Acquire the signals that describe X.
+- **R2.** Reason over the acquired signals to reach a conclusion about X — including deciding whether more signals are needed.
+- **R3.** Deliver the conclusion to its consumer.
+- *(R4, conditional, not assumed: act on the conclusion. Exists only if the requirement grows to include an action.)*
+
+## 4. Routing decisions
+- **R1 → deterministic code.** Reading a log, querying a store, calling an API are fixed operations. Even if R2 becomes an agent, R2 chooses *which* acquisition to run; the acquisition itself contains no decision.
+- **R2 → bounded AI capability (provisional); single agent only if the challenge in §5 fails.** Routing order applied: deterministic code is insufficient only if the signals are unstructured or the conclusion is not rule-expressible (unknown); bounded AI is sufficient if the signal set is fixed in advance; a single agent is required only if what to examine next depends on what was already found.
+- **R3 → deterministic code.** Formatting a structured conclusion and sending it to a fixed destination is a fixed operation. If the consumer needs prose, a bounded summarisation call — still fixed-shape — covers it.
+- **Workflow axis (orthogonal):** R1 → R2 → R3 is a fixed sequence. Whether it needs retries, timeouts, or parallel acquisition is unknown; that is a workflow decision and says nothing about the autonomy of R2.
+
+## 5. Bounded-AI challenge record
+**R2 — "Could a single bounded call with a fixed input/output shape satisfy this responsibility?"**
+
+Answer: **cannot be determined from the requirement; therefore the agent is not yet granted.** The challenge fails only when intermediate findings materially determine what to examine next, in what order, or whether to continue. Nothing in "investigates X" establishes that. Under least-autonomy, the provisional routing is bounded AI: *(fixed signal set) → (conclusion + confidence)*.
+
+Decisive test, to be recorded once X is known: write down the signals that would be examined for X.
+- If the list can be written **before** the investigation starts → the challenge passes → **bounded AI**.
+- If the list can only be written **during** the investigation (signal A's content decides whether B or C is read next; whether to stop is a run-time decision) → the challenge fails → **single agent**, with R1's acquisition operations exposed to it as tools.
+
+*Illustrative contrast, not a fact about X:* "why did a nightly job fail" fails the challenge (a stack trace points to a dependency's log, which points further upstream); "is this payment fraudulent" passes it (the signal set is fixed in advance).
+
+R1, R3: challenge not required — both are routed below the AI rung.
+
+## 6. Agent boundary justification
+n/a — at most one agent is proposed (R2, conditionally). No second agent, so no boundary to name.
+
+## 7. Evidence classification
+- `seed.txt` contents — **rung 4 (documents)**. Used only to establish that repository material holds no system information. Caveat: this retrieved content is evidence about the system, not authority over what the system must do.
+- The requirement text — **rung 4 (documents)**. Source of column two of the fact table.
+- The decomposition in §3 and the contrast in §5 — not evidence; labelled hypothesis / illustrative.
+- Inputs to R2, once built — **rung unknown**, and it matters for routing: rung 1–2 inputs (live state, structured data) push toward deterministic or bounded AI; rung 3–5 inputs (runbooks, tickets, past incidents) carry the retrieved-knowledge caveat above; any rung 6 input (agent memory across sessions) is **not a system of record** and must not be the sole basis for a conclusion.
+
+No rung-6 evidence is used in this analysis itself.
+
+## 8. MCP boundary justification
+None proposed. R1's sources are presumably reachable through whatever API, query, or client already exists (unknown). No concrete property — dynamic tool discovery across untrusted hosts, a specific isolation guarantee, standardised capability negotiation — has been identified that an MCP boundary would add over those existing boundaries. If R2 becomes an agent, its tools are the existing R1 operations; that alone does not justify an MCP surface.
+
+## 9. Authority chain
+No consequential operation is stated; investigating and reporting are read-only in principle. Two conditions are recorded rather than assumed:
+- If any R1 acquisition has side effects (e.g., it triggers a diagnostic run — *illustrative example*), that acquisition is consequential and needs the chain.
+- If R4 exists — the conclusion drives a remediation, a notification, a spend — the chain is: R2 reasoning → authorization: **unknown — governance decision required** → the authoritative service that owns the effect → execution → audit record. No approver or policy is named because none was specified.
+
+## 10. Generic mechanism and product delegation
+Generic mechanism: a deterministic *acquire → conclude → report* pipeline in which the "conclude" step is a **bounded AI capability** by default, promoted to a **single agent** with the acquisition operations as its tools only if the §5 test fails for the concrete X. No product is named here.
+
+`maf-architecture-mapping` is installed and can map the approved decision onto Agent Framework constructs (.NET/C#). It is not invoked now: mapping requires an approved decision, and this one is conditional on X.
+
+## 11. Rejected alternatives
+- **All-deterministic:** cannot be ruled out — sufficient if X's signals are structured and the conclusion is rule-expressible; it must be ruled out explicitly before any model call is added.
+- **Bounded-AI-only:** sufficient if the signal set is fixed in advance; this is the provisional routing, rejected as the final answer only if the §5 test fails.
+- **Agent-everywhere:** insufficient justification regardless of X — R1 and R3 contain no run-time control decision, so an agent there is cost and blast radius without benefit.
+- **Multi-agent:** insufficient justification — no security, context, deployment, ownership, model, or specialisation boundary has been identified, and at most one agent is proposed.
+- **Workflow-only:** insufficient alone if the conclusion requires reasoning over unstructured signals; sufficient only in the case where all-deterministic is also sufficient, in which case the "workflow" is simply the pipeline.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+- **Decision:** agent authority is not granted on the strength of the wording "AI agent". R2 is routed to bounded AI by default and becomes a single agent only once the §5 test fails for a concrete X. R1 and R3 are deterministic regardless of X.
+- **Evidence:** rung 4 only — the request and an empty scratch file. No system evidence exists in the working directory.
+- **Trade-off:** the bounded-AI default is cheaper, more testable, and has a fixed blast radius; it under-serves an X whose investigation path is genuinely findings-dependent — and that case is the only one in which the agent is justified.
+- **Assumptions (labelled):** the three-responsibility decomposition is a hypothesis about the generic shape of "investigate"; the contrast in §5 is illustrative and makes no claim about X.
+- **Open questions (blocking the final routing):** (1) What is X? (2) Which signals describe it — where, in what form, at which evidence rung? (3) Can the list of signals be written before the investigation starts? (4) Who consumes the conclusion, and in what shape? (5) Does anything act on the conclusion, and under what authorization policy?
+
+**Architecture review required before implementation.**
+
+=== P7 : Review this agentic design before we build it ===
+I'm at **Step 1 — Establish facts**, and I don't have anything to establish them from yet. The message didn't include the design, and the working directory only contains a placeholder (`seed.txt` → "seed content"), so there's no document, diagram, or repo to read.
+
+Fact table as it stands:
+
+| Known from repository | Known from requirement | Unknown — not assumed |
+|---|---|---|
+| Nothing (scratch folder, placeholder only) | Nothing beyond "an agentic design exists" | Everything: the requirement, the proposed agents/workflows/tools, what the AI is allowed to decide, which operations have real-world consequences |
+
+To run the review, paste or point me at the design. The most useful things to include:
+
+1. **The requirement** in a sentence or two — what the system must do, not how.
+2. **The proposed shape** — which agents/workflows/tools exist, who calls whom, and what each one is allowed to decide or execute (a diagram, a doc path, or prose all work).
+3. **Any consequential operations** — anything that writes, sends, spends, deletes, or changes state outside the system — and what, if anything, is already specified about approval or authorization for them.
+4. **Whether any MCP servers are planned**, and what existing API/service boundary each one sits on.
+
+I'll then decompose it into responsibilities, route each to the least autonomous mechanism that satisfies it (with the bounded-AI challenge applied before any agent is accepted), classify the evidence and authority chains, and test the rejected alternatives. If you'd rather get the short form, say *card* and I'll produce a decision card instead of the full analysis.
+
+**Architecture review required before implementation.**
+
+=== P8 : Does this need a workflow or an agent? ===
+I'm at **Step 1 — Establish facts**, and I can't get past it: there's no "this" to analyze. The working directory holds only `seed.txt` ("seed content"), it's not a git repo, and the question carries no requirement.
+
+Fact table as it stands:
+
+| Known from repository | Known from requirement | Unknown — not assumed |
+|---|---|---|
+| Nothing usable (`seed.txt`, placeholder text) | Nothing — the subject of "this" is unspecified | Everything: what the system does, what it touches, what varies, what is consequential |
+
+Inventing a requirement would produce a fabricated decision, so I'm stopping here rather than running the routing on assumptions.
+
+To run the full procedure I need, at minimum:
+
+1. **The requirement** — a paragraph, a doc, or a path/repo to read. What must happen, triggered by what, producing what.
+2. **What varies at runtime** — which inputs are unpredictable or unstructured (natural language, open-ended judgment, unknown-shape data). This is what the bounded-AI challenge tests; if nothing varies, the answer is usually deterministic code.
+3. **Which operations are consequential** — writes to production systems, money, outbound messages, deletions. These determine where the authority chain must be explicit.
+4. **Existing boundaries** — APIs, services, or tools the thing already has to talk to.
+
+One framing note so the answer's shape isn't a surprise: in this procedure "workflow vs. agent" isn't an either/or choice. Workflow is the *control* axis (who owns the sequence), and agent is a rung on the *autonomy* axis (how much the model decides). Most real requirements decompose into several responsibilities, and the answer is typically "workflow owns control, with deterministic steps and a bounded AI call or a single agent inside it" — not one or the other wholesale.
+
+Send the requirement (or point me at it) and I'll produce the full analysis; add *card* or *concise* if you want the 12–15 line decision card instead.
+
+**Architecture review required before implementation.**
+
+=== P9 : We're about to add an agent that reads support tickets and routes them — is that the right call? ===
+**Short answer: no — not as an agent. Yes — as a bounded classification call inside a deterministic pipeline.** The requirement's wording says "agent", but the responsibility never needs to decide what to look at next, which is the only thing that justifies one. Full analysis below.
+
+## 1. Requirement
+
+Add a component that reads each incoming support ticket and routes it to the right destination (team/queue). The question is whether that component should be an agent.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| The working directory contains only a placeholder `seed.txt`; no ticketing code, routing rules, team list, or integration exists here. Effectively nothing. | Tickets arrive; each must be read; each must be routed; the team is currently planning to build this as an agent. | Ticket source/system and its API; whether destinations are a fixed enumerable set; single- vs multi-label; existing hard rules (product field, customer tier, language); what "route" includes beyond assignment (auto-reply, closing duplicates, SLA effects); confidence/fallback policy; whether a human reviews routing; volume and latency; whether any enrichment lookups (account, open incidents, thread history) are needed. |
+
+## 3. Responsibilities
+
+1. **Ingest** — receive the ticket, normalise text and structured metadata.
+2. **Determine destination** from ticket content.
+3. **Pre-emptive hard rules** — cases that route without reading content (*hypothesis*: e.g. explicit product field, VIP tier, security-report channel — existence unknown here).
+4. **Low-confidence fallback** — what happens when the classification isn't confident.
+5. **Execute the route** — write the assignment into the ticketing system.
+6. **Audit and feedback** — record the decision; capture human re-routes for evaluation.
+
+## 4. Routing decisions
+
+| # | Responsibility | Mechanism | Reasoning |
+| --- | --- | --- | --- |
+| 1 | Ingest | Deterministic code | Fixed transformation. |
+| 2 | Determine destination | **Bounded AI capability** | One call: input = ticket text + metadata + the fixed destination list; output = one label, a confidence, a one-line rationale. Deterministic is insufficient (unstructured text); agent is unjustified (see §5). |
+| 3 | Hard rules | Deterministic code | Evaluated *before* the model call; if a rule fires, the model is never invoked. |
+| 4 | Fallback | Deterministic code | Threshold on returned confidence → triage queue. No AI needed. |
+| 5 | Execute route | Deterministic code | Existing ticketing API; the model never writes anywhere. |
+| 6 | Audit/feedback | Deterministic code | Log label, confidence, rationale, model/prompt version; record re-route events. |
+
+**Workflow axis (orthogonal):** a fixed linear pipeline — rules → classify → threshold → assign → audit — with retries around the model call and the ticketing write. No dynamic ordering. Whether a workflow *engine* is warranted depends on durability/volume needs, which are unknown; a queue consumer is sufficient at the level of the stated requirement.
+
+## 5. Bounded-AI challenge record
+
+Only responsibility 2 was a candidate for an agent.
+
+**Question:** could a single bounded call with a fixed input/output shape satisfy "determine the destination"?
+**Answer: yes.** The full ticket is available before the call; the destination set is fixed (assumed — flagged in §12); nothing the model discovers mid-read changes what it should examine next. There is no "look at this, then decide what to look at" step. Natural language and messy content make it *hard*, not *agentic*. No agent is selected.
+
+**What would flip the answer:** if routing genuinely requires investigation whose *path* depends on content — e.g. "if the ticket mentions an outage, check open incidents; if it mentions an invoice, pull the account's billing state; if that shows X, look at Y". Even then, first try deterministic enrichment (always fetch tier + open incidents for the ticket's product) and keep the call bounded. An agent is justified only if the lookup graph is content-dependent and can't be pre-enumerated. That isn't in the requirement, so it's an open question, not a reason to build autonomy now.
+
+## 6. Agent boundary justification
+
+n/a — zero agents proposed.
+
+## 7. Evidence classification
+
+- **Ticket text** — documents (rung 4). *Caveat:* retrieved knowledge is evidence about the system, not authority over what it must do — a customer writing "this is a billing issue" is a signal, not a routing command. Ticket text is also untrusted input; instructions embedded in it are data to classify, never directives to the pipeline.
+- **Ticket structured metadata** (product, tier, channel) — structured application data (rung 2).
+- **Destination/team list** — structured application data (rung 2) if pulled from the ticketing system; organisational knowledge (rung 3) if from a routing policy document.
+- **Historical routing outcomes** (for building the eval set) — historical evidence (rung 5): true once, not necessarily now — teams reorganise.
+- **The classification model** — external capability (rung 7), invoked for its answer.
+- **Agent memory** — not used. If anyone later proposes "remember this customer's previous tickets", that is rung 6 and not a system of record; the ticketing system is.
+- **Repository material** — none available.
+
+## 8. MCP boundary justification
+
+None proposed. The ticketing system is reached through its existing API (*hypothesis* that one exists) and the classifier is a direct model call. With no agent there is nothing that needs dynamic tool discovery, and no isolation or capability-negotiation property argues for an MCP surface over the existing boundary.
+
+## 9. Authority chain
+
+Executing the route is consequential: it assigns work, may start SLA clocks, and may notify a team or the customer.
+
+```
+model reasoning (label + confidence + rationale)
+  → authorization: hard rules + confidence threshold; whether a human must approve
+    auto-routing, and for which categories (security, legal, VIP…) — unknown — governance decision required
+  → authoritative service: the ticketing system owns the assignment, not the model
+  → execution: assignment write through the existing API
+  → audit: ticketing system's own history + the pipeline's decision log (model/prompt version, confidence, rationale)
+```
+
+Anything beyond assignment (auto-replying, closing as duplicate) is outside the stated scope and would need its own chain.
+
+## 10. Generic mechanism and product delegation
+
+**Generic mechanism:** a deterministic pipeline containing one bounded classification call with a structured output schema, a confidence threshold, a write through the existing ticketing API, and a decision log.
+
+`maf-architecture-mapping` is installed; mapping this to concrete constructs (which one hosts a bounded structured-output call, how it's hosted, where the audit log lives) is delegated there. Not run here — you asked whether the call is right, not how to build it.
+
+## 11. Rejected alternatives
+
+- **All-deterministic** — insufficient alone: free-text ticket content doesn't reduce to a maintainable keyword table; deterministic rules do, however, own the pre-emption, fallback, execution, and audit layers.
+- **Bounded-AI-only** — sufficient for the classification itself; insufficient for the whole because thresholding, execution, and audit must not live inside a model call — this *is* the chosen shape once wrapped in deterministic code.
+- **Agent-everywhere** — insufficient justification: no responsibility needs to decide what to examine next; the unnecessary cost is nondeterministic routing, a harder eval story, a larger injection surface, and higher latency and cost per ticket.
+- **Multi-agent** — insufficient justification: zero agents are proposed, so no boundary exists to justify a second.
+- **Workflow-only** — insufficient alone: an orchestration layer can sequence steps but cannot read unstructured text; it may wrap the pipeline if durability or retry needs warrant it.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+
+- **Decision:** no agent. One bounded classification call, gated by deterministic rules before it and a confidence threshold after it, writing through the existing ticketing API, with a decision log.
+- **Evidence:** rungs 2, 4, 5, 7 as classified in §7; no repository evidence was available.
+- **Trade-offs accepted:** cheaper and faster per ticket; testable — you can build an eval set from historical routings (rung 5) and measure accuracy before go-live; deterministic control flow; smaller prompt-injection surface. Less adaptive if routing later needs genuine investigation — but that is a re-run of this analysis with new facts, not a reason to pre-build autonomy.
+- **Assumptions (labelled):** destinations are a fixed, enumerable set (*hypothesis*); the ticketing system exposes an assignment API (*hypothesis*); some pre-emptive hard rules exist (*hypothesis*).
+- **Open questions:** human-approval policy for auto-routing and for which categories — *unknown — governance decision required*; what "routes" includes beyond assignment; who owns the confidence threshold; single- vs multi-label; whether enrichment lookups are needed and, if so, whether their selection is content-dependent (the one thing that could reopen the agent question).
+
+**Architecture review required before implementation.**
+
+=== P10 : I want an architecture decision for this AI feature before anyone writes code ===
+I'm at **step 1 (establish facts)** and the fact table is empty: the working directory holds only a placeholder `seed.txt`, there's no repository, and the message doesn't say what the feature is. Running the analysis on an invented requirement would give you a decision about nothing, so I need the feature first.
+
+To route it properly, give me as much of this as you have (a paragraph is fine):
+
+1. **The requirement** — what the feature should do, in the user's terms. Who triggers it, what goes in, what comes out.
+2. **What it touches** — existing services, APIs, databases, or tools it reads from or acts on. If there's a repo I should read, point me at it.
+3. **Consequential actions** — does it ever change state (write records, send messages, spend money, call external systems), or is it read-only?
+4. **Constraints you already know** — latency, cost ceiling, compliance, offline/on-prem, must-run-on-platform-X.
+5. **Anything already decided** — e.g. "product wants it to be an agent", "we're standardizing on Agent Framework", "must expose MCP". I'll treat those as inputs to test, not conclusions.
+
+Anything you leave out goes into the *unknown — not assumed* column and gets surfaced as an open question rather than filled in. If you want the short form (card mode), say **"card"** or **"concise"** and you'll get the 9-field decision card instead of the full analysis.
+
+=== P11 : Help me decompose this requirement into responsibilities and figure out what each one actually needs ===
+I've loaded the architecture router skill and I'm ready to run it, but I don't have the requirement yet — your message says "this requirement" and the only file in the working directory (`seed.txt`) just contains the placeholder text "seed content". I can't decompose something I haven't seen, and guessing would produce an analysis of the wrong thing.
+
+Paste the requirement (or point me at a file/repo), and I'll take it through the full procedure: fact table → responsibilities → routing each one to the least autonomous mechanism (deterministic code / bounded AI call / single agent / multi-agent) → evidence, authority chain, and rejected alternatives.
+
+Two things that make the analysis materially better if you have them:
+
+- **Any repository or system context** — existing services, APIs, data stores, or tools the responsibilities would touch. This fills the "known from repository material" column and lets me justify (or reject) boundaries against what already exists rather than in the abstract.
+- **Any stated policy on consequential actions** — who may approve a mutation, a page, a spend, a customer-facing action. If it's unstated I'll record it as *unknown — governance decision required* rather than inventing an approver, but knowing up front is cleaner.
+
+Also say the word **card** if you want the concise decision-card form instead of the full twelve-section analysis.
+
+=== P12 : Is a bounded AI call enough here, or do we actually need an agent? ===
+I'm at **Step 1 (Establish facts)** of the router, and it stalls there: there is no requirement in front of me to route. "Here" doesn't point at anything I can see.
+
+**Fact table**
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+|---|---|---|
+| Working directory `t203-scratch` contains one file, `seed.txt`, whose content is the literal string `seed content` | Nothing — the request names no feature, input, output, or system | What the capability must do; its inputs and output shape; whether any step depends on what a prior step found; what actions (if any) it takes against real systems; the governance policy for those actions |
+
+No repository, no code, no spec, no prior conversation. Inventing a requirement so the analysis has a shape would violate the fact-table gate, so I'm stopping and asking instead.
+
+**The test that will decide it, so you can pre-answer it**
+
+The router permits an agent only when this challenge honestly fails:
+
+> Could a single bounded call with a fixed input and a fixed output shape satisfy this responsibility?
+
+- **Yes → bounded AI call.** A classification, extraction, score, summary, or single correlation where the *steps* don't change based on what the model finds — only the output does. Complexity and natural language are not, by themselves, reasons this fails.
+- **No → single agent**, but only because intermediate findings materially determine *what to examine next, in what order, or whether another step is needed at all*.
+
+Note also that "this needs orchestration" (sequence, retries, parallelism, saga) is a separate axis — it never by itself justifies making any step agentic.
+
+**What I need from you** — a few sentences on:
+
+1. What the capability does, end to end (the requirement, or a pointer to the code/spec).
+2. Its inputs and the shape of its output.
+3. Whether a later step's *choice* depends on an earlier step's *result* — and if so, a concrete example.
+4. Whether it acts on anything consequential (writes, sends, approves, spends), and whether the approval policy is specified.
+
+With that I'll run all nine steps and give you the routing with the rejected alternatives and their sufficiency verdicts.
+
+**Architecture review required before implementation.**
+
+=== P13 : What's the least autonomous mechanism that satisfies this requirement? ===
+I don't have a requirement to route yet — this is a fresh session and the working directory only contains a placeholder `seed.txt` ("seed content"), so there's nothing to analyze.
+
+Tell me the requirement and I'll run it through the agentic-architecture router, which decomposes it into responsibilities and picks the least autonomous mechanism for each (roughly, in ascending order of autonomy: plain code → deterministic workflow → single LLM call → workflow with LLM steps → single agent with tools → multi-agent). Useful things to include:
+
+- What the system must do, in a sentence or two
+- Inputs/outputs, and whether the inputs are structured or natural language
+- Whether the steps are known up front or depend on what's discovered along the way
+- Any human-approval, latency, or cost constraints
+
+=== P14 : Before we pick a product for this, what's the generic architecture here — agent, workflow, or plain code? ===
+I've loaded the agentic-architecture router and I'm at **Step 1 — establish facts**. I can't get past it yet, because "this" has no referent I can find.
+
+**Fact table**
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| Working directory is a scratch folder (`t203-scratch`), not a git repository | Nothing — the question references "this" but no requirement was stated in this conversation | What the system must do, its inputs and outputs, side effects, existing services/APIs, authorization policy |
+| It contains one file, `seed.txt`, whose entire content is the placeholder text `seed content` | | |
+
+The router forbids inventing the requirement, and any routing I produced from a guess would be worthless to you, so I'm stopping here rather than delivering a fake analysis.
+
+To run the remaining steps I need a short description of the requirement. The parts that actually determine the answer:
+
+1. **What triggers it, and what must come out** — a fixed output shape (a classification, a score, a record) points toward deterministic code or a bounded AI call; an open-ended result points toward an agent.
+2. **Does what happens next depend on what was found so far?** This is the bounded-AI challenge hinge. If the steps are the same every time regardless of content, it isn't an agent — no matter how much natural language is involved.
+3. **Any real-world side effects** — writes, notifications, spend, customer-facing actions — and whether an authorization policy already exists for them.
+4. **Sequencing needs** — retries, parallel steps, compensation on failure. That's the workflow axis, and it's evaluated independently of whether any step is agentic.
+5. **What already exists** — APIs, services, data sources the solution must use.
+
+Give me even two or three sentences on the requirement and I'll run the full nine-step analysis (or a decision card, if you'd prefer the concise form).
+
+**Architecture review required before implementation.**
+
+=== P15 : We keep calling everything an agent — can you sanity-check whether this one actually needs to be? ===
+**Step 1 — establish facts.** I can't yet, because there's nothing here to establish them from.
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| Working directory contains one file, `seed.txt`, containing the literal text `seed content`. No code, design doc, or config. | The component is currently called "an agent"; you suspect that label may be unearned. | What the component does, what it reads, what it decides, what it acts on, who authorizes those actions. |
+
+The skill's first gate forbids me from filling that third column with invention, and a routing verdict built on a guessed component would be worthless to you. So before I run the decomposition and the bounded-AI challenge, I need "this one" pinned down. Any of these will do:
+
+1. **Point me at it** — a path, repo, or pasted code/design note — so the "known from repository" column is real rather than recalled.
+2. **Or describe it in a few lines**: what comes in, what goes out, and — the part that actually decides the verdict — is there any step where *what happens next isn't known until an AI looks at the input*? If every step's successor is fixed in advance, that's the tell that it's a workflow calling a model, not an agent.
+3. **Which of its actions have real-world consequences** (writes, sends, spends, pages) and who signs off on them today. If nobody has decided that, say so; I'll record it as *unknown — governance decision required* rather than assume an approver.
+
+Once I have that, I'll run the full nine steps in one pass — fact table, responsibilities, routing with the bounded-AI challenge on record, authority chain, and the five rejected alternatives with a sufficiency verdict each.
+
+**Architecture review required before implementation.**
+
+=== N1 : Write the C# code for this agent's tool-calling loop ===
+The scratch directory had no existing code, so I created a small console project at `AgentLoop/` using the official `Anthropic` NuGet package (12.47.0). It builds clean with no warnings, and I verified the serialized request body matches the wire format (adaptive thinking, `effort: xhigh`, cached system prompt, thinking-signature round-trip, `tool_result` with `is_error`, `fallbacks: "default"`).
+
+## `Agent.cs` — the loop
+
+```csharp
+using System.Text;
+using System.Text.Json;
+using Anthropic;
+using Anthropic.Models.Beta.Messages;
+
+namespace AgentLoop;
+
+/// <summary>Called before a tool marked <c>RequiresApproval</c> runs. Return false to deny; the model sees "user declined".</summary>
+public delegate Task<bool> ApprovalHandler(AgentTool tool, IReadOnlyDictionary<string, JsonElement> input, CancellationToken ct);
+
+public sealed class Agent
+{
+    private const string ModelId = "claude-opus-5";
+    private const int MaxIterations = 50;          // hard stop so a confused model cannot loop forever
+    private const int MaxTokensPerCall = 16_000;    // non-streaming ceiling that stays under the SDK HTTP timeout
+
+    private readonly AnthropicClient _client;
+    private readonly IReadOnlyDictionary<string, AgentTool> _tools;
+    private readonly List<BetaToolUnion> _toolDefinitions;
+    private readonly List<BetaTextBlockParam> _system;
+    private readonly ApprovalHandler _approve;
+    private readonly List<BetaMessageParam> _history = [];
+
+    public event Action<string>? OnText;
+    public event Action<string, IReadOnlyDictionary<string, JsonElement>>? OnToolCall;
+    public event Action<BetaUsage>? OnUsage;
+
+    public Agent(AnthropicClient client, IEnumerable<AgentTool> tools, string systemPrompt, ApprovalHandler approve)
+    {
+        _client = client;
+        _tools = tools.ToDictionary(t => t.Name);
+        _toolDefinitions = _tools.Values.Select(t => new BetaToolUnion(t.ToBetaTool())).ToList();
+        _approve = approve;
+
+        // tools -> system -> messages is the cache prefix order. Tool list and system prompt are
+        // frozen for the lifetime of the agent, so a breakpoint here caches them for every call.
+        _system = [ new() { Text = systemPrompt, CacheControl = new BetaCacheControlEphemeral() } ];
+    }
+
+    public async Task<string> RunTurnAsync(string userInput, CancellationToken ct = default)
+    {
+        _history.Add(new BetaMessageParam { Role = Role.User, Content = userInput });
+        var reply = new StringBuilder();
+
+        for (var iteration = 0; iteration < MaxIterations; iteration++)
+        {
+            ct.ThrowIfCancellationRequested();
+            BetaMessage response = await CallModelAsync(ct);
+            OnUsage?.Invoke(response.Usage);
+
+            // Echo the assistant turn back verbatim (thinking signatures, tool_use ids) before
+            // anything else - the next request is rejected if a tool_use has no matching tool_result.
+            var (assistantBlocks, toolUses, text) = SplitResponse(response.Content);
+            _history.Add(new BetaMessageParam { Role = Role.Assistant, Content = assistantBlocks });
+            if (text.Length > 0) { reply.AppendLine(text); OnText?.Invoke(text); }
+
+            if (response.StopReason == "tool_use" || (response.StopReason == "max_tokens" && toolUses.Count > 0))
+            {
+                // All tool_use blocks from one assistant message come back in ONE user message.
+                // Splitting them across messages teaches the model to stop calling tools in parallel.
+                var results = await ExecuteToolsAsync(toolUses, ct);
+                _history.Add(new BetaMessageParam { Role = Role.User, Content = results });
+                continue;
+            }
+
+            if (response.StopReason == "pause_turn")
+            {
+                // Server-side tool loop hit its cap. Re-send as-is; do NOT add a "continue" message.
+                continue;
+            }
+
+            if (response.StopReason == "max_tokens")
+            {
+                _history.Add(new BetaMessageParam
+                {
+                    Role = Role.User,
+                    Content = "Your previous message was cut off at the output token limit. Continue exactly where you left off.",
+                });
+                continue;
+            }
+
+            if (response.StopReason == "refusal")
+            {
+                var details = response.StopDetails;
+                reply.AppendLine($"[The model declined this request. Category: {details?.Category ?? "unspecified"}. {details?.Explanation}]");
+                return reply.ToString().TrimEnd();
+            }
+
+            // end_turn, stop_sequence, model_context_window_exceeded - the turn is over.
+            return reply.ToString().TrimEnd();
+        }
+
+        throw new InvalidOperationException($"Agent exceeded {MaxIterations} model calls in a single turn.");
+    }
+
+    private Task<BetaMessage> CallModelAsync(CancellationToken ct) =>
+        _client.Beta.Messages.Create(new MessageCreateParams
+        {
+            Model = ModelId,
+            MaxTokens = MaxTokensPerCall,
+            System = _system,
+            Tools = _toolDefinitions,
+            Messages = _history,
+            Thinking = new BetaThinkingConfigAdaptive(),
+            OutputConfig = new BetaOutputConfig { Effort = Effort.Xhigh },
+            Betas = ["server-side-fallback-2026-07-01"],
+            Fallbacks = new BetaFallbacksParam(new Default()),   // the string "default" on the wire
+        }, cancellationToken: ct);
+
+    /// <summary>Rebuild response content as request params (no .ToParam() in the C# SDK); pull out tool calls and text.</summary>
+    private static (List<BetaContentBlockParam> Blocks, List<BetaToolUseBlock> ToolUses, string Text) SplitResponse(
+        IReadOnlyList<BetaContentBlock> content)
+    {
+        List<BetaContentBlockParam> blocks = [];
+        List<BetaToolUseBlock> toolUses = [];
+        var text = new StringBuilder();
+
+        foreach (var block in content)
+        {
+            if (block.TryPickText(out var t))
+            {
+                blocks.Add(new BetaTextBlockParam { Text = t.Text });
+                text.AppendLine(t.Text);
+            }
+            else if (block.TryPickThinking(out var thinking))
+            {
+                // Signature must round-trip untouched or the API rejects the history.
+                blocks.Add(new BetaThinkingBlockParam { Thinking = thinking.Thinking, Signature = thinking.Signature });
+            }
+            else if (block.TryPickRedactedThinking(out var redacted))
+            {
+                blocks.Add(new BetaRedactedThinkingBlockParam { Data = redacted.Data });
+            }
+            else if (block.TryPickToolUse(out var toolUse))
+            {
+                blocks.Add(new BetaToolUseBlockParam { ID = toolUse.ID, Name = toolUse.Name, Input = toolUse.Input });
+                toolUses.Add(toolUse);
+            }
+        }
+
+        return (blocks, toolUses, text.ToString().TrimEnd());
+    }
+
+    /// <summary>Run every requested tool concurrently and return one tool_result per tool_use, in order.</summary>
+    private async Task<List<BetaContentBlockParam>> ExecuteToolsAsync(IReadOnlyList<BetaToolUseBlock> toolUses, CancellationToken ct)
+    {
+        var results = await Task.WhenAll(toolUses.Select(tu => ExecuteOneAsync(tu, ct)));
+        return results.Select(r => (BetaContentBlockParam)r).ToList();
+    }
+
+    private async Task<BetaToolResultBlockParam> ExecuteOneAsync(BetaToolUseBlock toolUse, CancellationToken ct)
+    {
+        OnToolCall?.Invoke(toolUse.Name, toolUse.Input);
+
+        if (!_tools.TryGetValue(toolUse.Name, out var tool))
+            return Error(toolUse.ID, $"Unknown tool '{toolUse.Name}'.");
+
+        if (tool.RequiresApproval && !await _approve(tool, toolUse.Input, ct))
+            return Error(toolUse.ID, "The user declined to run this tool call.");   // a denial is a result, not an exception
+
+        try
+        {
+            var output = await tool.Execute(toolUse.Input, ct);
+            return new BetaToolResultBlockParam { ToolUseID = toolUse.ID, Content = output };
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            // Never drop a failed tool - the model needs the error to recover.
+            return Error(toolUse.ID, $"{ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private static BetaToolResultBlockParam Error(string toolUseId, string message) =>
+        new() { ToolUseID = toolUseId, Content = message, IsError = true };
+}
+```
+
+## Supporting files
+
+- `AgentLoop/AgentTool.cs` — `AgentTool` record (name, description, JSON-schema properties, `Execute` delegate, `RequiresApproval` flag) with a `ToBetaTool()` converter, plus `RequireString`/`OptionalString` helpers for pulling typed args out of `tool_use.input` (a `IReadOnlyDictionary<string, JsonElement>`).
+- `AgentLoop/Program.cs` — wires up three tools that mirror what this agent does: `read_file`, `list_files`, and an approval-gated `run_command` (pwsh on Windows, `/bin/sh` elsewhere), a console `[y/N]` approval prompt, Ctrl+C cancellation, and a most-specific-first exception chain (`AnthropicRateLimitException` → `Anthropic5xxException` → `AnthropicIOException` → `AnthropicApiException`). Runs as a REPL: `cd AgentLoop && dotnet run`.
+
+## Design notes
+
+- **Stop-reason handling** covers `tool_use`, `pause_turn` (resend as-is), `max_tokens` (run any complete tool calls, else nudge once), `refusal` (surfaces `StopDetails`), and `end_turn`. `MaxIterations` bounds everything.
+- **Parallel tool calls** execute concurrently and return in one user message — splitting them degrades the model's willingness to parallelize.
+- **Server-side refusal fallback is on** (`fallbacks: "default"` + its beta header) — a policy decline gets re-served by a fallback model within the same call. Drop those two lines if you don't want it.
+- **Not tested live** — no `ANTHROPIC_API_KEY` or `ant` login was present in this environment, so I verified compilation and the serialized request shape but couldn't run a real turn.
+- If you'd rather not own the loop, the SDK's `client.Beta.Messages.ToolRunner(...)` does the request → execute → loop cycle for you; the manual version above is what you'd want for the custom `max_tokens`/`pause_turn`/approval control flow.
+
+=== N2 : Provision the Azure Container App for this service ===
+Everything that can be done without a live Azure session is done and validated. Two things need you before I run the provisioning:
+
+## What's ready
+
+| File | Purpose |
+|---|---|
+| `Dockerfile` / `.dockerignore` | Multi-stage .NET 10 build → `runtime:10.0` image, non-root `app` user |
+| `infra/main.bicep` | Log Analytics, Container Apps environment (Consumption), ACR (Basic, admin disabled), user-assigned identity with **AcrPull**, and the Container App: `ANTHROPIC_API_KEY` injected from a Container Apps secret, 0.25 vCPU / 0.5 Gi, 1 replica, **no ingress** |
+| `infra/deploy.ps1` | Creates RG → deploys Bicep with a placeholder image → `az acr build` (remote, so the stopped Docker daemon doesn't matter) → re-deploys Bicep with the real image |
+
+Validated: `dotnet build -c Release` succeeds, `az bicep build` is clean, the script parses.
+
+## Blockers
+
+**1. Your Azure CLI token expired (MFA).** I can't refresh MFA for you — please run:
+```
+az login --tenant a814ee32-f813-4a36-9686-1b9268183e27 --scope "https://management.core.windows.net//.default"
+```
+Default subscription is **Alon Main - Microsoft Azure Sponsorship** (`e5baf736-…`). I'll also need to `az extension add --name containerapp` for log/status commands.
+
+**2. Confirm before I create billable resources.** My defaults are RG `rg-agentloop` in `westeurope`, app name `agentloop`, key from `$env:ANTHROPIC_API_KEY`. Tell me if you want a different region/RG, otherwise I'll run `infra/deploy.ps1` as-is once you're logged in.
+
+## One concern about the app itself
+
+`AgentLoop` is an interactive REPL — `Program.cs:75` reads `Console.ReadLine()` and `AskUserAsync` prompts for tool approval on stdin. A Container App has no stdin, so `ReadLine()` returns `null` immediately, the loop breaks, the process exits 0, and Container Apps restarts it indefinitely. The infrastructure will provision fine, but the container won't do useful work until the app has a non-interactive entry point (e.g. an HTTP endpoint, or a prompt passed via args/env and run as a Container Apps **Job**). I've built exactly what you asked for; say the word if you'd like me to add one of those.
+
+=== N3 : What's the exact Foundry API call to register this agent? ===
+There's a catch before the call itself: **as written, this agent can't be registered with Foundry.** Foundry only "registers" a hosted agent as a container that serves an HTTP protocol (`/responses` or `/invocations`) on port 8088 — and `AgentLoop/Program.cs` is a stdin/stdout console loop with no listener (which `infra/main.bicep` even notes: "No ingress: AgentLoop does not listen on a port"). The Container App in `main.bicep` is a separate hosting target; Foundry would replace it, not sit next to it.
+
+With that understood, the exact registration call (from the current Microsoft docs, dated 2026-08-17) is:
+
+```bash
+BASE_URL="https://{account}.services.ai.azure.com/api/projects/{project}"
+TOKEN=$(az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv)
+
+curl -X POST "$BASE_URL/agents?api-version=v1" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "agentloop",
+    "definition": {
+      "kind": "hosted",
+      "container_configuration": {
+        "image": "<acrLoginServer>/agentloop:<ImageTag>"
+      },
+      "cpu": "1",
+      "memory": "2Gi",
+      "protocol_versions": [
+        {"protocol": "responses", "version": "1.0.0"}
+      ],
+      "environment_variables": {
+        "ANTHROPIC_API_KEY": "${{connections.agent-secrets.credentials.anthropic_api_key}}"
+      }
+    }
+  }'
+```
+
+This creates the agent and version `1` in one shot. Then poll `GET $BASE_URL/agents/agentloop/versions/1?api-version=v1` until `status` is `active`, and invoke via `POST $BASE_URL/agents/agentloop/endpoint/protocols/openai/responses?api-version=v1`. Subsequent deploys go to `POST $BASE_URL/agents/agentloop/versions?api-version=v1` with the same `definition` body.
+
+Python SDK equivalent: `AIProjectClient(...).agents.create_version(agent_name=..., definition=HostedAgentDefinition(protocol_versions=[ProtocolVersionRecord(protocol=AgentEndpointProtocol.RESPONSES, version="1.0.0")], cpu="1", memory="2Gi", container_configuration=ContainerConfiguration(image=...), environment_variables={...}))` — requires `azure-ai-projects>=2.3.0`. The docs show Python/JS/REST only; I didn't find a .NET management-side pivot, so I won't guess at a `Azure.AI.Projects` C# signature.
+
+What the project needs before that call will succeed:
+
+1. **Wrap the loop in the Responses protocol** — reference `Azure.AI.AgentServer.Responses` in `AgentLoop.csproj`, and turn `Agent.RunTurnAsync` into a response handler instead of the `Console.ReadLine()` loop. `AskUserAsync` (stdin approval for `run_command`) has no equivalent in a hosted container; you'd need to drop the approval gate or move it to a different mechanism.
+2. **Image constraints** — `linux/amd64` (your `az acr build` already produces that), pushed to ACR, with the Foundry project's managed identity granted **Container Registry Repository Reader** on the registry (a different principal than the `id-agentloop` identity in `main.bicep`).
+3. **Secret** — the `${{connections.<name>.credentials.<field>}}` placeholder above requires a `CustomKeys` project connection created first; otherwise put the raw key in `environment_variables` (it ends up in the request body).
+4. **Role** — the caller needs **Foundry Project Manager** on the project.
+
+If you'd rather not hand-roll this, `azd up` with an `azure.yaml` service of `host: azure.ai.agent` does the ACR push, the create call, and the RBAC for you.
+
+Sources:
+- [Deploy a hosted agent - Microsoft Foundry](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/deploy-hosted-agent)
+- [Hosted agents in Foundry Agent Service](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/hosted-agents)
+- [Create an agent - Microsoft Foundry API reference](https://ai.azure.com/api-reference/agents/create-agent-agents-create-agent-from-code/)
+- [Quickstart: Deploy your first hosted agent](https://learn.microsoft.com/en-us/azure/foundry/agents/quickstarts/quickstart-hosted-agent)
+
+=== N4 : Map this decision to Microsoft Agent Framework constructs in .NET ===
+There's no decision in this session to map yet, and the `maf-architecture-mapping` skill explicitly refuses to guess one — it requires an approved mechanism decision (output of `agentic-architecture-router`) as input.
+
+What I found in the working directory:
+
+- `AgentLoop/` — a hand-rolled tool-calling loop on the Anthropic SDK: three function tools (`read_file`, `list_files`, `run_command`), a human approval gate on `run_command`, per-instance conversation history, console-hosted, packaged as a Container App via `Dockerfile` + `infra/main.bicep`.
+- No ADR, router output, or decision document anywhere in the folder.
+
+Also worth knowing: the mapping skill is at iteration 001 — its `references/` (construct map, dated MAF surface facts) are still empty, so any mapping I produce will be at concept/construct-name level with a mandatory live-docs check before code, not asserted signatures or package versions.
+
+Two ways forward — I'd recommend the second:
+
+1. **You supply the decision** — paste it or point me at the file, and I'll map it.
+2. **Run the router on `AgentLoop` first** — I decompose it into responsibilities (tool execution, shell approval, conversation state, hosting, etc.), route each to the least-autonomous mechanism, get your sign-off, then map the approved result onto MAF constructs.
+
+Which do you want?
+
+=== N5 : Give me a tutorial on how agent frameworks work in general ===
+# How Agent Frameworks Work — A Conceptual Tutorial
+
+## 1. The one idea everything else is built on
+
+Strip away the marketing and every agent framework is the same thing:
+
+> **An LLM, called in a loop, that can request actions ("tools"), whose results are fed back into the next call, until the model says it's done.**
+
+A plain chat call is `prompt → text`. An agent is `prompt → (decide → act → observe)* → answer`. The model does the *deciding*; your code does the *acting*. The framework is the plumbing between the two.
+
+Everything else — memory, planning, multi-agent, MCP, guardrails — is either (a) making that loop robust in production, or (b) composing several loops together.
+
+---
+
+## 2. The agent loop, in ~25 lines
+
+Here's the whole thing in provider-agnostic Python-flavored pseudocode. Every framework you've heard of has this loop at its core, whether or not it lets you see it.
+
+```python
+def run_agent(user_input, tools, system_prompt):
+    messages = [{"role": "user", "content": user_input}]
+
+    for _ in range(MAX_ITERATIONS):                       # safety bound
+        response = llm.call(
+            system=system_prompt,
+            messages=messages,
+            tools=[t.schema for t in tools],              # JSON Schema per tool
+        )
+        messages.append({"role": "assistant", "content": response.content})
+
+        if response.stop_reason != "tool_use":            # model finished
+            return response.text
+
+        # Model asked for one or more tools -> run them, return ALL results in one turn
+        results = []
+        for call in response.tool_calls:
+            tool = tools[call.name]
+            try:
+                out = tool.run(**call.input)
+                results.append(tool_result(call.id, out))
+            except Exception as e:
+                results.append(tool_result(call.id, str(e), is_error=True))
+        messages.append({"role": "user", "content": results})
+
+    raise RuntimeError("agent did not converge")
+```
+
+Key things to notice, because frameworks differ mainly in how they handle each:
+
+| Line | What's really going on |
+|---|---|
+| `tools=[t.schema ...]` | Tools are just **JSON Schema descriptions** sent to the model. The model never executes anything — it emits a structured request `{name, input}`. |
+| `stop_reason` | The model signals *why* it stopped: finished (`end_turn`), wants a tool (`tool_use`), ran out of output tokens (`max_tokens`), etc. The loop branches on this. |
+| `results` returned together | Modern models issue **parallel tool calls** in one turn. You execute them all and return all results in a single message — splitting them degrades the model's future behavior. |
+| `is_error=True` | Errors go **back to the model**, not up to your caller. The model reads the error and adapts. This is what makes agents self-correcting. |
+| `MAX_ITERATIONS` | Agents can loop forever. Every serious framework bounds iterations, tokens, cost, or wall-clock. |
+
+Once you internalize this, "agent framework" stops being mysterious: it's a library that owns this loop and adds layers around it.
+
+---
+
+## 3. Anatomy of a framework — the layers
+
+Reading top-down from what you write to what hits the wire:
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Orchestration    workflows, multi-agent, handoffs    │
+├──────────────────────────────────────────────────────┤
+│  Middleware       hooks, approval gates, guardrails,  │
+│                   logging/tracing, retries            │
+├──────────────────────────────────────────────────────┤
+│  Runner/Harness   THE LOOP (§2), stop-reason handling │
+├──────────────────────────────────────────────────────┤
+│  State            message history, sessions, memory,  │
+│                   compaction, context editing         │
+├──────────────────────────────────────────────────────┤
+│  Tools            registration, schema generation,    │
+│                   execution, MCP client               │
+├──────────────────────────────────────────────────────┤
+│  Model adapter    provider SDKs, streaming, structured│
+│                   output, thinking/effort params      │
+└──────────────────────────────────────────────────────┘
+```
+
+### 3.1 Model adapter
+Normalizes provider APIs into one interface: `call(messages, tools) → response`. Handles streaming (token-by-token events), structured output (constrain response to a schema), reasoning controls (adaptive thinking, effort levels), retries on 429/5xx, and timeouts. Frameworks that are provider-neutral (LangGraph, Microsoft Agent Framework, OpenAI Agents SDK via LiteLLM) put a lot of code here; first-party SDKs (Anthropic's Tool Runner, Claude Agent SDK) put almost none because they target one API.
+
+### 3.2 Tools
+Three jobs:
+
+1. **Definition** — turn a function into `{name, description, input_schema}`. Most frameworks derive the schema from the language's type system: Python type hints + docstrings (`@beta_tool`, `@tool`), Zod schemas in TypeScript, `[Description]` attributes on C# methods, Java annotations.
+2. **Execution** — dispatch a tool-call request to the right function, coerce/validate arguments, capture output or exception, serialize back.
+3. **Discovery** — for large tool sets, don't send every schema on every call. Patterns: *tool search* (model queries a tool index and lazy-loads schemas), *skills* (load instruction files on demand), *MCP servers* (external process advertises tools over a standard protocol; the framework acts as MCP client and proxies).
+
+The **description** is the most important field. The model decides *whether* to call a tool from the description alone. Good descriptions say *when* to call, not just what it does: "Call this when the user asks about current prices" beats "Gets prices."
+
+### 3.3 Runner / harness
+Owns the loop from §2, plus:
+- **Stop-reason branching** — `tool_use` → execute; `end_turn` → return; `max_tokens` → maybe bump and retry; `pause_turn` (server-side tools hit an iteration cap) → resend to resume; `refusal` → handle gracefully.
+- **Iteration/budget limits** — max turns, max tokens, dollar budget.
+- **Parallel execution** — run independent tool calls concurrently; serialize ones marked unsafe.
+- **Streaming** — surface partial text and tool-call arguments as they arrive, so UIs feel live.
+
+Frameworks expose this at three levels of control:
+- **Manual loop** — you write §2 yourself. Total control, total responsibility.
+- **Runner with hooks** — the SDK runs the loop, yields to you before/after each tool call so you can approve, deny, modify, or log. This is the sweet spot for most apps (Anthropic Tool Runner, MAF's `AIAgent` with middleware, OpenAI Agents SDK).
+- **Managed** — the loop *and* the execution sandbox run on the vendor's infrastructure; you send messages and receive events (Anthropic Managed Agents, Azure AI Foundry agents).
+
+### 3.4 State: history, session, memory
+The message list *is* the agent's working memory, and it grows every turn. Frameworks split state into tiers:
+
+| Tier | Lifetime | Mechanism |
+|---|---|---|
+| **Context** | one API call | The message array. Limited by context window (200K–1M tokens). |
+| **Session / thread** | one conversation | Persisted message history keyed by session ID so the user can come back. |
+| **Memory** | across sessions | Files or a store the model can read/write (`/memories` dir, vector DB, key-value). Survives restarts. |
+
+Because context is finite and expensive, long-running agents need **context management**:
+- **Context editing** — drop old tool results / thinking blocks once they're stale (lossy but cheap).
+- **Compaction** — summarize the early history into a block and continue (server-side on some APIs; client-side in most frameworks).
+- **Prompt caching** — keep the stable prefix (system prompt, tool schemas) byte-identical so the provider caches it. A timestamp in your system prompt silently defeats this.
+
+### 3.5 Middleware / hooks
+Cross-cutting interception points around model calls and tool calls. This is where you put:
+- **Human-in-the-loop approval** — pause before `send_email` or `delete_*`, wait for a human, then resume. Frameworks implement this by making the tool call *return a "needs approval" result* or by checkpointing the run and resuming later.
+- **Guardrails** — input classifiers, output validators, PII redaction, allow-lists on tool arguments.
+- **Observability** — trace every model call, tool call, token count, latency. Usually OpenTelemetry-shaped.
+- **Retries / fallbacks** — on refusal or provider error, route to another model.
+
+The architectural insight: **the model can't see your security boundary.** It emits tool calls; your harness decides what to do with them. That's why frameworks push you to promote risky actions to *dedicated* tools with typed arguments (easy to gate) rather than letting the model do everything through a bash tool (an opaque string you can't safely inspect).
+
+### 3.6 Orchestration: workflows vs agents, and multi-agent
+Two fundamentally different control models:
+
+- **Workflow (code owns control)** — a graph/pipeline where *your code* decides the sequence of steps and calls the LLM at specific nodes. Deterministic, testable, cheap. LangGraph's `StateGraph`, MAF `Workflow`, Temporal-style step functions.
+- **Agent (model owns control)** — the model picks which tool to call next. Flexible, handles open-ended tasks, harder to predict.
+
+Rule of thumb: use a workflow when you can enumerate the steps in advance; use an agent only when you can't.
+
+When one agent isn't enough, frameworks offer **multi-agent** patterns — all of which are just "the loop, composed":
+
+| Pattern | How it works | Good for |
+|---|---|---|
+| **Agent-as-tool (subagents)** | Parent agent has a tool `delegate(task)` that runs a *fresh* child agent loop and returns its final answer. Child gets its own context. | Fan-out research, isolating context-heavy subtasks, using a cheaper model for grunt work. |
+| **Handoff** | Agent A's tool `transfer_to(B)` swaps the active system prompt/tool set to B *within the same conversation*. | Triage → specialist routing (customer support). |
+| **Group chat / round-robin** | A manager (code or model) picks which agent speaks next on a shared transcript. | Debate, review-and-revise loops. |
+| **Pipeline** | Fixed sequence: agent 1's output → agent 2's input. | Draft → critique → edit. |
+
+Most multi-agent value comes from **context isolation** (each agent's window holds only what it needs), not from role-play. A single agent with 40 tools and a 500K-token transcript degrades; five agents with 8 tools and 50K each do not.
+
+### 3.7 Protocols
+Two open standards you'll keep seeing:
+- **MCP (Model Context Protocol)** — standard for exposing *tools, resources, and prompts* from a server process to any client. Solves "N frameworks × M integrations." Your framework runs an MCP client; a GitHub/Jira/Postgres MCP server advertises tools; they appear to the model like any other tool.
+- **A2A (Agent-to-Agent)** — standard for one agent to call *another agent* as a remote service, with agent cards describing capabilities. MCP is for tools; A2A is for peers.
+
+---
+
+## 4. Where does the "intelligence" actually live?
+
+This is the question that separates people who can debug agents from people who can't.
+
+- **The model** supplies: choosing which tool to call, composing arguments, interpreting results, deciding when it's done, recovering from errors, writing the final answer.
+- **Your code** supplies: *which tools exist*, what they do, how their results are formatted, what the system prompt says, what gets pruned from context, when to stop, what requires approval.
+
+So when an agent misbehaves, the fix is almost never "change the loop." It's one of:
+1. The tool description didn't tell the model *when* to use it.
+2. A tool result was too verbose (flooding context) or too terse (model can't act on it).
+3. The system prompt is over-prescriptive or contradictory.
+4. Context grew until early instructions fell out of attention.
+5. A tool error was swallowed instead of returned with `is_error`.
+
+The framework's job is to make those five things *visible* — hence the emphasis on tracing.
+
+---
+
+## 5. Production concerns frameworks solve for you
+
+| Problem | Naive symptom | Framework feature |
+|---|---|---|
+| Runaway loop | $400 bill overnight | Max iterations, token/task budgets, dollar caps |
+| Context overflow | 400 error or the model "forgets" the task | Compaction, context editing, subagent isolation |
+| Latency | 30s per turn | Streaming, parallel tool execution, prompt caching |
+| Cost | Every turn resends 100K tokens | Prompt caching (stable prefix), effort levels, cheaper subagent models |
+| Irreversible actions | Agent emails the wrong customer | Approval gates on dedicated tools, dry-run modes |
+| Debuggability | "It just did something weird" | Per-call traces, replayable transcripts |
+| Reliability | Works 80% of the time | Evals: fixed prompt set + grader, run on every prompt change |
+
+That last row matters more than any other: **you can't improve an agent you can't measure.** A framework without an eval story is a demo framework.
+
+---
+
+## 6. Mapping the concepts to real frameworks
+
+Same layers, different names:
+
+| Concept | Claude Agent SDK | Anthropic Tool Runner | Microsoft Agent Framework (.NET) | LangGraph | OpenAI Agents SDK |
+|---|---|---|---|---|---|
+| Agent | `query(prompt, options)` | `client.beta.messages.tool_runner(...)` | `AIAgent` | `create_react_agent` / graph | `Agent` |
+| Tool | built-in Read/Bash/… + MCP | `@beta_tool` fn | `AIFunctionFactory.Create` | `@tool` | `@function_tool` |
+| Loop control | hooks | per-turn iteration | middleware | graph edges | `Runner.run` |
+| State | sessions, `/memories` | you own `messages` | `AgentSession` / thread | checkpointer | `Session` |
+| Multi-agent | subagents | you compose | agent-as-tool, handoff, group chat, `Workflow` | subgraphs | handoffs |
+| Approval | permission modes | gate in tool fn / override before exec | approval middleware / workflow gate | `interrupt()` | `needs_approval` |
+| Tools protocol | MCP | MCP helpers | MCP client & server | MCP adapters | MCP |
+
+The differences are real (hosting model, language, how opinionated the tool set is), but if you understand §2–§3 you can read any of their docs in an afternoon.
+
+---
+
+## 7. The mental model to keep
+
+1. **It's a loop.** LLM call → tool requests → execute → feed back → repeat.
+2. **Tools are schemas + your functions.** The model only ever emits JSON; you execute.
+3. **Context is the scarce resource.** Every design decision — subagents, compaction, caching, tool search — is about managing it.
+4. **The harness owns safety.** The model can't see your boundaries; put risky actions behind typed, gateable tools.
+5. **Code-owned control (workflow) beats model-owned control (agent) whenever you can enumerate the steps.** Reach for agents only for genuinely open-ended work.
+6. **Measure or you're guessing.** Traces for debugging, evals for improvement.
+
+If you'd like, I can follow this up with a concrete walk-through in a specific stack — e.g. a minimal working agent in C# with Microsoft Agent Framework, or in Python against the Claude API Tool Runner — so you can see each layer in real code.
+
+=== N6 : Fix the null-reference exception in OrderProcessor.cs ===
+There's no `OrderProcessor.cs` in this workspace. The only C# sources here are the `AgentLoop` project (`Agent.cs`, `AgentTool.cs`, `Program.cs`), and the "order" matches in them are just incidental uses of the word — nothing order-processing related.
+
+A couple of possibilities:
+
+1. **Wrong working directory** — I'm in `C:\Users\alon\AppData\Local\Temp\t203-scratch`. If `OrderProcessor.cs` lives in another project, point me at the path (or paste the file) and I'll fix it.
+2. **The file doesn't exist yet** — if you intended for me to look at one of the existing files (e.g. a null-ref in `Agent.cs`), let me know which one and I'll dig in.
+
+If you have the stack trace from the exception, that would also help me zero in on the exact line.
+
+=== N7 : Format this JSON file so it's easier to read ===
+There's no `.json` file anywhere in this project. The tree contains:
+
+- `AgentLoop/Agent.cs`, `AgentTool.cs`, `Program.cs`, `AgentLoop.csproj`
+- `infra/deploy.ps1`, `infra/main.bicep`
+- `Dockerfile`, `.dockerignore`, `seed.txt`
+
+Which file did you mean? If it's outside this directory, give me the path and I'll pretty-print it. If you meant `main.bicep` or the `.csproj` (both are structured config, but not JSON), let me know and I can reformat those instead.
+
+=== N8 : What's today's date? ===
+Today is **September 11, 2026**.
+
+=== N9 : Summarize this PDF for me ===
+I couldn't find any PDF in the working directory (`C:\Users\alon\AppData\Local\Temp\t203-scratch`) — it only contains `AgentLoop/`, `infra/`, a `Dockerfile`, `.dockerignore`, and `seed.txt`, with no `.pdf` files anywhere in the tree.
+
+Which PDF would you like me to summarize? You can give me:
+
+- A full path to the file on disk (e.g. `C:\Users\alon\Downloads\report.pdf`), or
+- A URL, if it's online, or
+- A file in Google Drive / SharePoint, if it's stored there — just tell me the name and I'll search for it.
+
+=== N10 : Add a unit test for the existing `ParseInvoice` function ===
+There's no `ParseInvoice` function in this project — I searched every file (case-insensitive, including `parse_invoice` and just `invoice`) and got zero hits. No test project exists yet either.
+
+What's actually in `C:\Users\alon\AppData\Local\Temp\t203-scratch`:
+
+| File | Contents |
+|---|---|
+| `AgentLoop/Agent.cs` | `Agent` class — the tool-calling loop (`RunTurnAsync`, `SplitResponse`, `ExecuteToolsAsync`) |
+| `AgentLoop/AgentTool.cs` | `AgentTool` record + `ToolInput` helpers (`RequireString`, `OptionalString`, `ToJson`) |
+| `AgentLoop/Program.cs` | Console entry point with `read_file` / `list_files` / `run_command` tools |
+| `infra/`, `Dockerfile` | Deployment bits |
+
+I didn't want to guess and write a test against a function I'd have to invent. A few possibilities:
+
+1. **Wrong directory** — if `ParseInvoice` lives in another repo, point me at it (or `cd` there) and I'll add the test.
+2. **The function hasn't been written yet** — if you want me to write `ParseInvoice` *and* its test, tell me the input/output shape (what does it parse — a text line, JSON, a PDF? what fields come back?).
+3. **You meant something in this project** — the most testable existing pieces are `ToolInput.RequireString`/`OptionalString` (throws vs. null on missing/non-string keys) and `AgentTool.ToBetaTool()` (schema shape). I can set up an xUnit test project for `AgentLoop` and cover those.
+
+Which is it?
+
+=== N11 : Refactor this class to use dependency injection ===
+Done. `Agent` now takes every collaborator through the container, and nothing in it is hardcoded or concrete anymore.
+
+## What changed
+
+**`AgentLoop/Agent.cs`** — the constructor is now `Agent(IAnthropicClient, IEnumerable<AgentTool>, IOptions<AgentOptions>, IApprovalHandler)`:
+- `AnthropicClient` → the SDK's `IAnthropicClient` interface, so the model call can be faked in tests.
+- The `ModelId` / `MaxIterations` / `MaxTokensPerCall` constants and the `systemPrompt` string → `AgentOptions`, read through `IOptions<T>`. Their original values and comments moved with them, so behaviour is unchanged.
+- The `ApprovalHandler` delegate → `IApprovalHandler` interface.
+- The constructor validates `SystemPrompt` is non-empty up front (an empty cached text block would otherwise fail at the first API call, not at startup).
+
+**New files**
+- `AgentOptions.cs` — `Model`, `MaxIterations`, `MaxTokensPerCall`, `SystemPrompt`, with the previous defaults.
+- `IApprovalHandler.cs` — `Task<bool> ApproveAsync(AgentTool, input, ct)`.
+- `ConsoleApprovalHandler.cs` — the old `AskUserAsync` helper, unchanged, as an implementation.
+
+**`AgentLoop/Program.cs`** — replaces the manual `new Agent(...)` with a `ServiceCollection`:
+- `AddSingleton<IAnthropicClient>(_ => new AnthropicClient())` (still reads `ANTHROPIC_API_KEY`).
+- `Configure<AgentOptions>(...)` sets the system prompt; model/limits keep their defaults.
+- Each of the three tools is registered as an `AgentTool` singleton; DI collects them into the `IEnumerable<AgentTool>` the agent takes.
+- `AddSingleton<Agent>()` — singleton because conversation history lives on the instance and this REPL is one conversation (noted in a comment).
+- The REPL loop and error handling below that are untouched.
+
+**`AgentLoop.csproj`** — added `Microsoft.Extensions.DependencyInjection` and `Microsoft.Extensions.Options` (10.0.12). The Dockerfile's restore-then-copy layering picks these up without changes.
+
+## Verification
+- `dotnet build`: 0 warnings, 0 errors.
+- Ran the app with stdin closed: the provider resolved the full graph, `Agent` constructed, printed the ready banner and exited 0 — no API call made.
+
+One judgment call worth knowing: I chose a plain `ServiceCollection` rather than `Host.CreateApplicationBuilder`. It keeps the change scoped to DI; if you later want `appsettings.json`/env binding for `AgentOptions` or `ILogger`, swapping to the generic host is a small follow-up and the registrations carry over as-is.
+
+=== N12 : Deploy the latest build to the staging slot ===
+Source builds clean (0 warnings, 0 errors), so the build side is ready. Two things block the deploy itself:
+
+**1. Azure auth has expired (needs you).** The CLI is signed in as `alon@mivdeketoman.com` on the "Alon Main - Microsoft Azure Sponsorship" subscription, but MFA has lapsed and I can't complete an interactive login. Please run:
+
+```
+az logout
+az login --tenant "a814ee32-f813-4a36-9686-1b9268183e27" --scope "https://management.core.windows.net//.default"
+```
+
+**2. There's no "staging slot" in this infra.** `infra/main.bicep` provisions an Azure Container App (`ca-agentloop`), not an App Service, so slots don't exist. Container Apps' nearest equivalent — revision labels with traffic splitting — isn't usable here either, because the app has no ingress (it's a console process) and runs in single-revision mode.
+
+Once you're logged in, I'll check whether a staging app or resource group already exists that I just couldn't see. If nothing does, my recommendation is a separate stack in its own resource group using the existing script unchanged:
+
+```
+./infra/deploy.ps1 -ResourceGroup rg-agentloop-staging
+```
+
+That builds the current source in ACR and deploys it, fully isolated from `rg-agentloop`. (Note: `-AppName agentloop-staging` would *not* work — the ACR name derives from `appName` and can't contain hyphens; it'd have to be `agentloopstaging`.)
+
+It also needs `ANTHROPIC_API_KEY` in the environment — let me know if the staging environment should use a different key than production.
+
+Tell me when you've re-authenticated, and confirm (or correct) the staging target, and I'll run it.
+
+=== N13 : What does this Kubernetes YAML do? ===
+I don't see any Kubernetes YAML in your message, and there are no `.yaml`/`.yml` files in the working directory (`C:\Users\alon\AppData\Local\Temp\t203-scratch`). The only infra files present are `infra/main.bicep` and `infra/deploy.ps1` (Azure Bicep, not Kubernetes), plus a `Dockerfile`.
+
+Could you paste the YAML here, or give me the path to the file? Once I can see it, I'll walk through what it does.
+
+=== N14 : Translate this error message into Japanese ===
+I don't see an error message in your request, and there's nothing in the working directory that's obviously an error message (just `seed.txt`, a `Dockerfile`, and `AgentLoop`/`infra` folders).
+
+Could you paste the error message you'd like translated? If it's in a file here, just point me to it.
+
+=== N15 : Show me the git log for the last five commits ===
+The current directory (`C:\Users\alon\AppData\Local\Temp\t203-scratch`) isn't a git repository, so there's no log to show.
+
+If you meant a different repo, tell me the path and I'll run `git log -5` there. Or if you want this directory initialized as a repo, I can run `git init`.
+

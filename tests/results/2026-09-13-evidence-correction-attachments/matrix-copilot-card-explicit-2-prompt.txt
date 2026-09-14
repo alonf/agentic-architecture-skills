@@ -1,0 +1,1 @@
+Use the agentic-architecture-router skill. Give me a concise decision card. Every five minutes compare a supplied numeric queue length with our configured threshold and send one alert through our existing notification service when exceeded. The rule and destination are already configured.

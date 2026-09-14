@@ -1,0 +1,28 @@
+ΓùÅ skill(agentic-architecture-router)
+
+IΓÇÖm applying the card-mode architecture review: deterministic scheduling, threshold evaluation, and notification dispatch are the relevant responsibilities.
+
+ΓùÅ Read quality-gates.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\quality-gates.md
+  Γöö 42 lines read
+
+ΓùÅ Read decision-card-template.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\assets\decision-card-template.md
+  Γöö 16 lines read
+
+# Decision Card
+
+Mode: Decision Card  
+Requirement: Every five minutes, compare a supplied numeric queue length with the configured threshold and send one alert through the existing notification service when exceeded.  
+Known facts: Requirement text is the only supplied evidence; the rule, threshold, destination, and notification service are stated as already configured.  
+Unknown / assumptions: Alert deduplication/re-arm behavior, failure handling, and audit policy are unknown ΓÇö governance decisions required; responsibilities are non-atomic: scheduling/evaluation and notification dispatch.  
+Routed mechanism: Deterministic scheduler plus deterministic threshold comparison and service call; bounded-AI challenge: unnecessary because inputs, rule, and action are explicit; workflow axis: lightweight scheduled workflow.  
+Agent boundary: No agent or MCP boundary; existing notification API/service is sufficient and avoids adding autonomous decision authority or a tool protocol.  
+Evidence classification: Requirement text = Documents (4); configured runtime rule, destination, and service are described but not observed; memory/retrieved knowledge is not authority.  
+Authority chain: reasoning: deterministic ΓÇ£queue length > thresholdΓÇ¥ proposal ΓåÆ authorization: unknown - governance decision required ΓåÆ authoritative service: existing notification service ΓåÆ execution: send one configured alert ΓåÆ audit: recorded outcome, if supported.  
+Rejected alternatives: all-deterministic: sufficient and preferred; bounded-AI-only: unnecessary because no interpretation is needed; agent-everywhere: insufficiently justified and adds risk; multi-agent: unnecessary coordination; workflow-only: sufficient as orchestration, with deterministic logic inside it.  
+Decision and trade-off: Use a scheduled deterministic monitor invoking the existing notification service; this minimizes cost, latency, and operational uncertainty, while deduplication, failure, and audit semantics remain to be specified.  
+**Architecture review required before implementation.**
+

@@ -1,0 +1,100 @@
+**Answer: No.** This is a scoring function over a fixed signal set, not an investigation. It routes to deterministic code. Analysis below, then the code.
+
+## Architecture analysis
+
+**1. Requirement** — Classify an incoming payment transaction as fraudulent or not, from a fixed set of signals, and return a decision.
+
+**2. Fact table**
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| Working directory contains only `seed.txt` ("seed content"); no existing code, language, or fraud policy | Signal set is fixed in advance | Which concrete signals exist (the ones in the code are *illustrative*) |
+| | Output is a decision, not an action | Weights and thresholds (defaults in the code are *illustrative*) |
+| | The component classifies; it does not fetch or block | Whether decisions are auto-enforced or reviewed by a human |
+| | | Implementation language (C# chosen as an assumption — see §12) |
+
+**3. Responsibilities** — Not atomic; three:
+- R1 — Evaluate each signal against a rule and accumulate a score.
+- R2 — Map the score to a decision (approve / review / decline).
+- R3 — Emit the reasons that fired so the decision is auditable and replayable.
+
+**4. Routing decisions** — All three → **deterministic code**. Signals are structured and fixed; weights and thresholds are fixed configuration; the mapping is a comparison. Nothing about the computation depends on content the code hasn't already been given. Bounded AI was considered next in order and rejected: it would add latency, cost, and non-determinism without changing what is computed. Workflow axis: n/a inside the component — one synchronous call, no sequencing, retries, or compensation.
+
+**5. Bounded-AI challenge record** — No responsibility routed to an agent, so the challenge is not the gate here; recorded anyway for R1–R3: *could a single fixed-shape call satisfy this?* Yes — and a fixed rule table satisfies it with less autonomy still. There is no run-time "what to examine next" decision; the signal list never changes based on what a prior signal returned.
+
+**6. Agent boundary justification** — n/a; zero agents proposed.
+
+**7. Evidence classification** — Repository material (`seed.txt`): rung 4, document; contributes nothing to the design. Runtime inputs to the classifier (transaction amount, velocity counts, verification results): rung 2, structured application data supplied by the caller — the component asserts nothing about their freshness or correctness. No agent memory (rung 6) and no retrieved knowledge used, so those caveats do not apply.
+
+**8. MCP boundary justification** — None proposed. It is an in-process pure function; no property (discovery, isolation, capability negotiation) would be gained by an MCP surface.
+
+**9. Authority chain** — The classifier's output is a decision; *acting* on it (declining a payment, holding funds) is consequential and lies outside the component:
+
+```
+deterministic reasoning (score + reasons)
+  -> authorization policy: unknown — governance decision required
+     (auto-decline vs. route Review to a human; who may override)
+  -> authoritative service (payment processor / ledger)
+  -> execution
+  -> audit (persist FraudAssessment: score, decision, every fired rule)
+```
+
+The component covers stage 1 and produces the record for stage 5. Routing away from an agent does not remove the chain.
+
+**10. Generic mechanism and product delegation** — Mechanism: pure deterministic scoring function with externalised rule configuration. No AI mechanism selected, so there is nothing to delegate to `maf-architecture-mapping`.
+
+**11. Rejected alternatives**
+- All-deterministic — **sufficient**; this is the chosen routing.
+- Bounded-AI-only — sufficient but not least-autonomous; only warranted if weights must be *learned* from labelled outcomes, and then it's a classical scoring model behind the same interface, still not an agent.
+- Agent-everywhere — insufficient justification; no responsibility decides what to examine next at run time.
+- Multi-agent — insufficient justification; no security, context, deployment, ownership, model, or specialisation boundary exists.
+- Workflow-only — unnecessary; a single synchronous call has nothing to orchestrate (the surrounding payment pipeline may, but that's out of scope).
+
+**12. Decisions, trade-offs, assumptions, open questions**
+- Decision: deterministic rule scoring, config-driven thresholds, reasons emitted for audit.
+- Trade-off: rules don't adapt to new fraud patterns without a config change; that is the price of explainability and replayability, and it's the right price when the requirement says "fixed set of signals."
+- Assumptions (labelled): C# / .NET 10 (chosen because it's the toolchain on this machine; nothing in the requirement mandates it); the specific signals and point values are illustrative placeholders.
+- Open questions: real signal list; who tunes weights and how they're versioned; enforcement policy for Review and Decline.
+
+## Code
+
+Built and tested in the working directory (`dotnet test`: 5 passed, 0 failed).
+
+```
+FraudClassification/
+  TransactionSignals.cs   — the fixed signal set (record; caller computes every field)
+  FraudRuleSet.cs         — weights + thresholds as init-only config; FraudRuleSet.Default
+  FraudClassifier.cs      — Classify(signals) → FraudAssessment; pure, no I/O
+  FraudAssessment.cs      — Decision, Score, Reasons (value-equal, so it can be persisted/compared)
+FraudClassification.Tests/
+  FraudClassifierTests.cs — approve / review / decline paths, custom rule set, determinism
+```
+
+Core of `FraudClassification/FraudClassifier.cs:17`:
+
+```csharp
+public FraudAssessment Classify(TransactionSignals s)
+{
+    var reasons = new List<FraudReason>();
+    void Fire(bool condition, string rule, int points) { if (condition && points > 0) reasons.Add(new(rule, points)); }
+
+    Fire(s.Amount >= _rules.HighAmount, $"Amount {s.Amount} at or above {_rules.HighAmount}", _rules.HighAmountPoints);
+    Fire(s.TransactionsLastHour > _rules.MaxTransactionsPerHour, $"{s.TransactionsLastHour} transactions in the last hour", _rules.VelocityHourPoints);
+    Fire(!s.CardVerificationPassed, "Card verification (CVV) failed", _rules.CardVerificationFailedPoints);
+    // ... one Fire(...) per signal
+
+    var score = reasons.Sum(r => r.Points);
+    var decision = score switch
+    {
+        _ when score >= _rules.DeclineThreshold => FraudDecision.Decline,
+        _ when score >= _rules.ReviewThreshold  => FraudDecision.Review,
+        _ => FraudDecision.Approve,
+    };
+    return new FraudAssessment(decision, score, reasons);
+}
+```
+
+Usage: `new FraudClassifier().Classify(signals)` or `new FraudClassifier(FraudRuleSet.Default with { DeclineThreshold = 60 })`. Replace the illustrative signals and point values with your real ones; the classifier shape doesn't change.
+
+**Architecture review required before implementation.**
+

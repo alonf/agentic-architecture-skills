@@ -1,0 +1,117 @@
+● skill(agentic-architecture-router)
+
+● Read quality-gates.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\q
+  │ uality-gates.md
+  └ 42 lines read
+
+● Read architecture-analysis-template.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\assets\archi
+  │ tecture-analysis-template.md
+  └ 41 lines read
+
+● Read decision-framework.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\d
+  │ ecision-framework.md
+  └ 92 lines read
+
+● Read evidence-and-authority.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\e
+  │ vidence-and-authority.md
+  └ 87 lines read
+
+● Read counter-examples.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\c
+  │ ounter-examples.md
+  └ 74 lines read
+
+## 1. Requirement
+
+Classify free-text support requests into supplied categories or return `unknown`, returning a label only without assigning tickets, contacting individuals, or invoking subsequent tools, given that no complete deterministic rule table exists and category definitions are supplied with the request.
+
+---
+
+## 2. Fact Table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| *None* (no repository material provided) | Component classifies free-text support requests into supplied categories or returns `unknown`. | Target hosting runtime / framework. |
+| | Full request text and category definitions are provided together in the input payload. | Exact list and semantic definitions of categories. |
+| | Component returns a label only; it never assigns or contacts anyone. | Upstream caller or downstream consumer identity. |
+| | There is no complete deterministic rule table for classification. | Service level agreements or latency/throughput targets. |
+
+---
+
+## 3. Responsibilities
+
+- **Atomic responsibility:** Classify a single supplied free-text input against supplied category definitions into a fixed schema (`category_label` or `unknown`). (This requirement is atomic and cannot be usefully decomposed further without inventing external workflows).
+
+---
+
+## 4. Routing Decisions
+
+- **Classification responsibility:** Routed to **bounded AI capability** (a single model call with fixed input context and structured output schema) paired with deterministic schema validation.
+- **Workflow axis:** Evaluated independently as orthogonal; no multi-step orchestration, branching loop, or workflow engine is required for a single request-response invocation.
+
+---
+
+## 5. Bounded-AI Challenge Record
+
+- **Challenge:** *Could a single bounded call with a fixed input/output shape satisfy this responsibility?*
+- **Verdict & Reasoning:** **Yes.** The complete context (support request text and category definitions) is supplied up front. The component does not need to decide at runtime what to examine next, choose tools dynamically, or adapt its execution path based on intermediate findings. A single structured model call completely satisfies the classification. Therefore, an agent is unnecessary and unjustified.
+
+---
+
+## 6. Agent Boundary Justification
+
+- **n/a** — Zero agents proposed.
+
+---
+
+## 7. Evidence Classification
+
+- **Support request text:** Rung 4 (**Documents** — uncurated incoming text).
+- **Category definitions:** Rung 3 (**Organizational knowledge** — structured classification guidelines/definitions).
+- **Mandatory caveats:** Retrieved organizational knowledge and input documents serve as evidence about the classification context, not authority over system execution or policy. Agent memory (Rung 6) is not used; if introduced in any future state, agent memory is not a system of record.
+
+---
+
+## 8. MCP Boundary Justification
+
+- **None proposed.** The classification is an in-process library call or standard service API invocation. No standardized tool discovery, cross-process protocol abstraction, or external agentic tool interface is required.
+
+---
+
+## 9. Authority Chain
+
+- **No consequential operation.** The component returns a diagnostic label only. It produces no state mutations, external communications, or ticket assignments. Any future assignment or notification downstream must enforce its own deterministic control boundary (`reasoning → authorization → authoritative service → execution → audit`).
+
+---
+
+## 10. Generic Mechanism and Product Delegation
+
+- **Generic mechanism:** Bounded AI capability (single-turn structured completion with JSON/schema enforcement) wrapped in a deterministic service/library boundary.
+- **Product delegation:** Concrete mapping to SDKs (such as Semantic Kernel, Microsoft Agent Framework, or raw client SDKs) is delegated to `maf-architecture-mapping` or the appropriate platform skill upon architecture sign-off.
+
+---
+
+## 11. Rejected Alternatives
+
+- **All-deterministic:** Insufficient because free-text natural language support requests cannot be reliably classified without a complete rule table or semantic understanding.
+- **Bounded-AI-only:** **Sufficient.** A single fixed-shape model call with structured output and fallback to `unknown` satisfies all stated requirements.
+- **Agent-everywhere:** Insufficiently justified; introducing autonomous decision-making or tool-selection loops adds unnecessary latency, cost, and operational complexity without delivering functional benefit.
+- **Multi-agent:** Insufficiently justified; there are no separate security, context, deployment, or specialization boundaries requiring multi-agent coordination.
+- **Workflow-only:** Insufficient on its own because deterministic workflow steps cannot perform semantic natural language classification without an AI capability, though a simple endpoint or function wrapper suffices to host the bounded call.
+
+---
+
+## 12. Decisions, Evidence, Trade-offs, Assumptions, and Open Questions
+
+- **Decision:** Do not build an agent. Implement as a **bounded AI capability** (single-prompt structured classification) returning a fixed enum/string label or `unknown`.
+- **Evidence:** Rung 3 (organizational category definitions) and Rung 4 (request documents) provided in full at invocation time.
+- **Trade-offs:** Accepts model non-determinism on borderline cases (mitigated via strict temperature, few-shot examples in prompt, and fallback to `unknown`) in exchange for avoiding complex rules engines or unneeded agent infrastructure.
+- **Assumptions:** Input payload size fits within standard model context windows without dynamic retrieval/chunking.
+- **Open Questions:** What is the downstream policy for handling the `unknown` label (*unknown — governance decision required*)?
+
+**Architecture review required before implementation.**
+

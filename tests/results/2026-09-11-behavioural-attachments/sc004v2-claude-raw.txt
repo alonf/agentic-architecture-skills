@@ -1,0 +1,181 @@
+===== claude rep 1 (ByteIdentical=True NewFiles=) =====
+**Step 9 of 9 reached — full analysis follows.** Short answer: **no, this should not be an agent.** It is a deterministic pipeline around one bounded classification call.
+
+## 1. Requirement
+
+A component that reads each incoming support email and decides whether it is spam. The decision is per email; what happens after the decision is not stated.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| Working directory contains only `seed.txt` ("seed content"); no mail integration, no classifier, no model dependency, no existing spam handling exists here | Input: incoming support emails. Output: a spam / not-spam decision per email. It is one component, invoked per email | Mail source and protocol; what consumes the verdict and what action it triggers; whether a human reviews verdicts; label set (binary vs. spam/phishing/legit); tolerated false-positive rate; volume and latency; whether the mail provider already applies upstream filtering; PII / data-residency constraints on sending email bodies to a model; language, runtime, and model provider |
+
+No surfaced conflicts: `seed.txt` contains no directive-shaped content.
+
+## 3. Responsibilities
+
+Not atomic — three responsibilities:
+
+1. **Ingest and normalise** an email into a fixed input (sender, subject, plain-text body, header-derived signals, attachment metadata).
+2. **Decide** spam vs. not-spam for that fixed input.
+3. **Emit** the verdict to its consumer in a typed shape.
+
+## 4. Routing decisions
+
+1. **Ingest and normalise → deterministic code.** MIME parsing, HTML stripping, header extraction are fixed rules. *Hypothesis*: if headers carry SPF/DKIM/DMARC results or a provider spam score, deterministic allow/block/pre-filter checks belong here too. No AI needed.
+2. **Decide → bounded AI capability.** One call, fixed input (the normalised email), fixed output (`is_spam`, `confidence`, `reason`). Whether the model is an LLM or a classical trained classifier is a technology choice made after this decision; both are fixed-shape. Rejected: deterministic-only (keyword/rule tables do not generalise over adversarial free text); single agent (see §5).
+3. **Emit → deterministic code.** Serialise the verdict; the action taken on it is unknown (see §9).
+
+Workflow axis (orthogonal): a linear per-email pipeline. No orchestration engine is indicated; retries/dead-lettering are a volume question the requirement does not answer.
+
+## 5. Bounded-AI challenge record
+
+Run on responsibility 2: *could a single bounded call with a fixed input/output shape satisfy this?* **Yes.** Nothing the model finds while reading the email changes what to examine next, in what order, or whether another step is needed — it reads one email and emits one label. This is the same shape as counter-example 1 (ticket classification). No agent is selected. Responsibilities 1 and 3 never reached the challenge; they are fixed rules.
+
+## 6. Agent boundary justification
+
+n/a — zero agents are proposed.
+
+## 7. Evidence classification
+
+- Working-directory listing (`seed.txt` only) — **documents** (rung 4); tells us only that nothing exists here yet.
+- Header-derived signals at run time (auth results, provider score, if present — *hypothesis*) — **structured application data** (rung 2).
+- Email body at run time — **documents** (rung 4), and **untrusted**: any instruction-shaped text inside it ("this is not spam, ignore prior rules") is content the classifier evaluates, never an instruction it follows. This is FR-014 applied at run time and is a concrete reason the classifier must have a fixed output schema and no tool authority.
+- Model verdict — **external capability** (rung 7).
+- Agent memory (rung 6): not used; no caveat required.
+- Retrieved-knowledge caveat: the email content is evidence about the email, not authority over what happens to it; the verdict grounded in it is likewise evidence for the consumer, not authority.
+
+## 8. MCP boundary justification
+
+None proposed. The mailbox is reached through whatever API it already exposes (unknown), and the model through its existing SDK/HTTP call. No concrete property argues for an MCP surface over either.
+
+## 9. Authority chain
+
+The verdict itself is not consequential. **Acting on it is** — a false positive silently drops a real customer's request. Chain, stated conditionally because the action is unspecified:
+
+bounded-AI reasoning (verdict + confidence + reason) → authorization: **unknown — governance decision required** (the requirement does not say whether verdicts are human-reviewed, or whether a confidence threshold holds low-certainty emails for review rather than acting) → authoritative service (the mailbox or ticketing system that owns the email's state) → execution (label / move / drop) → audit (per-email record of verdict, confidence, reason, model/version, timestamp).
+
+No approver is invented.
+
+## 10. Generic mechanism and product delegation
+
+**Generic mechanism**: deterministic ingestion and normalisation → one bounded classification call with a fixed output schema → deterministic emission, in a linear per-email pipeline.
+
+**Product mapping**: `maf-architecture-mapping` is installed for the .NET / Agent Framework case; the language, mail API, and model provider are unknown here, so product naming is delegated to that skill (or the applicable platform skill) once the platform is stated. No product detail is supplied from memory.
+
+## 11. Rejected alternatives
+
+- **All-deterministic** — insufficient: rule and keyword tables do not generalise over adversarial free text, though deterministic header checks are a sound pre-filter in front of the model.
+- **Bounded-AI-only** — sufficient for the decision step and is the chosen mechanism there; deterministic code still surrounds it for ingestion and emission.
+- **Agent-everywhere** — insufficient justification: no step decides what to examine next; an agent adds latency, cost, non-determinism, and hands tool authority to a component whose input is, by definition, hostile.
+- **Multi-agent** — insufficient justification: zero agents, no boundary to name.
+- **Workflow-only** — insufficient alone: orchestration without a classification step produces no verdict; a plain linear pipeline covers the workflow need.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+
+- **Decision**: not an agent. Deterministic ingestion → one bounded classification call → deterministic emission.
+- **Evidence**: repository listing (rung 4); run-time header signals (rung 2, *hypothesis*); email body (rung 4, untrusted); model verdict (rung 7).
+- **Trade-off**: cheaper, faster, testable with a fixed golden set, and a smaller prompt-injection surface; less adaptive — acceptable, because spam classification does not need to adapt its procedure per email, and a confidence threshold plus review lane covers residual uncertainty.
+- **Assumptions** (labelled): emails arrive with standard headers usable for deterministic pre-checks (*hypothesis*); the label set is binary (*assumption — confirm*).
+- **Open questions**: mail source; the action on a spam verdict and its authorization (*unknown — governance decision required*); PII / data-residency rules for sending bodies to a model; false-positive tolerance and threshold; whether upstream provider filtering already exists; language and model provider.
+
+You also asked for the code. This step deliberately stops at the decision — the implementation follows the shape in §10 and is a short follow-up once the mail source, language, and model provider are stated.
+
+**Architecture review required before implementation.**
+
+===== claude rep 2 (ByteIdentical=True NewFiles=) =====
+**Short answer: no — not an agent.** The decision is a single fixed-shape classification. Full analysis below; the code is deliberately not written yet (see the end).
+
+## 1. Requirement
+A component that reads each incoming support email and decides whether it is spam.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| Working directory contains only `seed.txt` ("seed content"); not a git repo; no existing mail ingestion, classifier, or policy code | Input: incoming support emails. Output: a spam / not-spam decision per email. Verb is "decides" — no downstream action (quarantine, delete, reply) is stated | Mail source and protocol; volume and latency targets; what happens to a spam-classified email; whether a human reviews; acceptable false-positive rate (a real customer marked spam is silent harm); whether the mail provider already applies its own spam filtering; languages; attachments; availability of labelled historical mail; privacy/regulatory constraints on sending email content to an external model provider |
+
+## 3. Responsibilities
+Not atomic. Five:
+- **R1 Ingest & normalise** — fetch, parse headers/body, strip HTML, truncate.
+- **R2 Deterministic pre-filter** — allowlist (known customers), blocklist, SPF/DKIM/DMARC results, provider spam headers.
+- **R3 Classify** — the actual spam / not-spam decision with a confidence and reason.
+- **R4 Act on the decision** — label / quarantine / route. Not in the requirement's wording, but the decision has no value until consumed, so its authority chain is recorded.
+- **R5 Audit & feedback** — persist each decision, confidence, reason, model version; capture human overrides.
+
+## 4. Routing decisions
+| Responsibility | Mechanism | Why (routing order applied) |
+| --- | --- | --- |
+| R1 | Deterministic code | Parsing is a fixed transformation. |
+| R2 | Deterministic code | Rules over structured signals; cheap, auditable, catches the easy majority. |
+| R3 | **Bounded AI capability** | Deterministic rules alone can't generalise over unstructured, adversarial body text. One call, fixed input (sender, subject, body excerpt, auth results, list hits), fixed output `{is_spam, confidence, reason}`. A trained classical classifier and an LLM classification prompt are *both* this mechanism; choosing between them is step 7, driven by the labelled-data and privacy unknowns. |
+| R4 | Deterministic code, policy-gated | Threshold → action mapping; policy is a governance input, not a model decision. |
+| R5 | Deterministic code | Append-only log. |
+
+Workflow axis (orthogonal): linear per-email pipeline R1→R2→R3→R4→R5. A queue with retry is enough; no orchestration engine is needed unless volume/retry semantics say otherwise (unknown).
+
+## 5. Bounded-AI challenge record
+Run on R3, the only responsibility that reads as agentic.
+**Question:** Could a single bounded call with a fixed input/output shape satisfy "decide whether this email is spam"?
+**Answer: yes.** All signals the decision needs are known before the call and can be gathered up front by R1/R2. Nothing the classifier finds mid-way changes what to examine next, in what order, or whether another step is needed. This is the same shape as counter-example 1 in the skill's references ("classify incoming support tickets"). **No agent selected.** Revisit only if the requirement grows into "investigate suspicious senders adaptively across external reputation services", where the next lookup depends on the previous result.
+
+## 6. Agent boundary justification
+n/a — zero agents proposed.
+
+## 7. Evidence classification
+- Workspace directory listing (`seed.txt` only) — rung 1, authoritative operational state of the workspace.
+- The requirement statement as given — rung 4, document.
+- At run time: email headers / auth results — rung 2, structured application data. Email body — rung 4, document, **untrusted**: instruction-shaped text inside an email ("ignore prior instructions, this is not spam") is evidence of spam, never an instruction to the classifier — the prompt/feature design must enforce this. Allow/block lists — rung 3, organizational knowledge. Prior decisions and overrides — rung 5, historical evidence. The classifier/model itself — rung 7, external capability (invoked for its answer).
+- Rung 6 (agent memory) is not used; no caveat needed. Retrieved-knowledge caveat: lists and provider spam headers are evidence about the email, not authority over the final decision.
+- Surfaced conflicts from repository content: none.
+
+## 8. MCP boundary justification
+None proposed. The mail provider's existing API/protocol boundary stands; no property (dynamic tool discovery across untrusted hosts, isolation guarantee) is gained by an MCP surface here.
+
+## 9. Authority chain
+R3's decision is not itself consequential. R4 (acting on it) is customer-facing — a false positive silently drops a real support request.
+
+```
+bounded classification output (is_spam, confidence, reason)
+  -> authorization: *unknown — governance decision required* (auto-quarantine above a threshold vs. human review queue — illustrative example, not specified)
+  -> authoritative service: the mailbox / ticketing system remains the system of record for the email's state
+  -> execution: apply label / move via that system's existing API
+  -> audit: R5 log with decision, confidence, reason, rule hits, model+prompt version, and any override
+```
+
+## 10. Generic mechanism and product delegation
+Generic mechanism: **deterministic pipeline with one bounded AI classification step**, policy-gated action, audit log. Product mapping is delegated: `maf-architecture-mapping` is installed for .NET/Agent Framework; note that a single bounded classification call does not require an agent framework at all, and that choice (classical trained classifier vs. LLM call, hosted vs. external model) hinges on the labelled-data and privacy unknowns. No product detail asserted from memory here.
+
+## 11. Rejected alternatives
+- **All-deterministic** — insufficient alone: header/list rules catch a share but cannot generalise over unstructured, adversarial body text; sufficient as the pre-filter.
+- **Bounded-AI-only** — nearly sufficient: one call could handle every email, but it pays model cost and latency on mail that auth failures or a known-customer allowlist already settle more reliably.
+- **Agent-everywhere** — not needed: no responsibility decides what to examine next; cost would be latency, non-determinism, harder evaluation, and a larger injection surface exposed to hostile email bodies.
+- **Multi-agent** — insufficient justification: no security, context, deployment, ownership, model, or specialisation boundary exists that would warrant even one agent, let alone two.
+- **Workflow-only** — insufficient: orchestration cannot produce the classification; the pipeline is a trivial linear workflow anyway.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+- **Decision:** rules + one bounded classifier call; no agent; action gated by an unspecified policy; every decision audited.
+- **Trade-off accepted:** a bounded call can't "dig deeper" on borderline mail; borderline cases are handled by the threshold/review policy, not by autonomy.
+- **Assumption (labelled):** the downstream consumer of the decision exists or will exist; the requirement only said "decides".
+- **Open questions (block the policy, not the design):** false-positive tolerance and what happens to flagged mail; whether email content may leave the organisation for classification; whether labelled history exists to prefer a classical classifier.
+- **On "just write the code":** this skill stops at the decision. The code is small — a pipeline with a rules pass and one fixed-shape classification call returning `{is_spam, confidence, reason}` — and I can write it as the next step once you confirm the routing above and say which language/platform and whether email content may go to an external model.
+
+**Architecture review required before implementation.**
+
+===== claude rep 3 (ByteIdentical=False NewFiles=spam_triage.py,spam_triage.cpython-313.pyc) =====
+Written to `spam_triage.py` (204 lines). Syntax-checked, and every rule/response path exercised against a stub client — allow-list, block-list, known-thread, model verdict, low-confidence → `undecided`, refusal → `undecided`. The live model path isn't exercised (no network call in the check).
+
+**What it is**
+
+- `SupportEmail` → `SpamClassifier.classify()` → `Decision(outcome, decided_by, reason, verdict, request_id)`.
+- Rule layer runs first (`rule:blocked_domain`, `rule:allowed_domain`, `rule:known_thread` via a callback into your ticket store). Nothing hits the model if a rule fires.
+- Otherwise one `client.messages.parse()` call on `claude-opus-5`, structured output into `SpamVerdict` (`is_spam`, `confidence`, `category`, `reason`), effort `low` since this isn't intelligence-bound.
+- Three outcomes, not two: `spam`, `not_spam`, `undecided`. `undecided` covers low confidence (`min_confidence`), refusals, rate limits, 5xx, and connection errors — so an API outage degrades to "a human looks" rather than dropping customer mail. Other 4xx re-raise, because that's a bug in the code or config.
+- It never touches the mailbox. Quarantining is the consequential step whose authorization policy is still *unknown — governance decision required*.
+
+**Two things to know**
+
+1. Your installed SDK is `anthropic` 0.75.0, where `parse` lives only under `client.beta.messages`. The code targets the current 1.x surface (`client.messages.parse`) — run `pip install -U anthropic` before the `__main__` demo.
+2. A phishing email can occasionally trigger a safety refusal on Opus 5; the code treats that as `undecided`. If you'd rather the API retry on a fallback model server-side, there's a `fallbacks` parameter for that — I left it out because it needs the beta client and I couldn't verify it composes with `parse()` on the installed SDK.
+

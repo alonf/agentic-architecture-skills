@@ -1,0 +1,1 @@
+Should this be an agent? Every five minutes compare a supplied numeric queue length with our configured threshold and send one alert through our existing notification service when exceeded. The rule and destination are already configured.

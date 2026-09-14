@@ -1,0 +1,47 @@
+ΓùÅ skill(maf-architecture-mapping)
+
+IΓÇÖm applying the mapping procedure: construct ownership first, then runtime/control, assurance, and the dated surface facts without asserting unresolved API names.
+
+ΓùÅ Read assurance.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\assurance.md
+  Γöö 55 lines read
+
+ΓùÅ Read runtime-and-control.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\runtime-and-control.md
+  Γöö 62 lines read
+
+ΓùÅ Read construct-map.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\construct-map.md
+  Γöö 67 lines read
+
+ΓùÅ Read maf-surface.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\maf-surface.md
+  Γöö 116 lines read
+
+**Step 1 ΓÇö Decision accepted.** The approved design is one primary agent with per-interaction conversational state, corpus retrieval, optional handoff orchestration, and peer delegation over A2A. The mapping below stays at construct level; signatures and availability claims must be re-verified against the dated surface reference before implementation.
+
+| Responsibility | MAF construct | Why it owns the responsibility |
+|---|---|---|
+| Agent reasoning across the interaction | `AIAgent` | Owns runtime decisions and tool use for the single-agent responsibility. The dated surface reference confirms `AIAgent` and the `AIProjectClient(...).AsAIAgent(...)` adapter name as of 2026-09-13/14. |
+| Conversational state across turns in one interaction | `AgentSession` | Provides turn continuity without implying durable cross-session memory. The surface reference records `AgentSession` as the current C# type and notes that `AgentThread` was superseded, confirmed 2026-09-14. |
+| Retrieval from an external corpus | `AIContextProvider` backed by a search source, such as `TextSearchProvider` | Keeps retrieved evidence attributable and separate from the agentΓÇÖs reasoning and conversational state. These names were confirmed by the maintainer on 2026-09-14. |
+| Optional handoff orchestration | A workflow graph using the handoff orchestration construct | Handoff is a workflow-level composition concern, not a replacement for the primary agent or its session. The surface reference records `Microsoft.Agents.AI.Workflows` and `AgentWorkflowBuilder`, with the handoff builder confirmed 2026-09-14. This option should remain disabled unless the routing requirement actually needs agent-to-agent handoff. |
+| Peer delegation to an independently owned agent | Agent-card discovery followed by A2A task delegation | The peer receives a task description rather than a local function call, so this is row-11 delegation rather than agent-as-tool consultation. A real deployment/ownership boundary and reachable ingress are prerequisites. |
+
+**Runtime and control placement.** The primary agent may run in-process if no isolation or independent deployment boundary is required. The A2A peer must be separately reachable through its own ingress contract; hosted placement is therefore the natural boundary when the peer is independently owned. Discovery must occur before delegation to establish the peerΓÇÖs capabilities and binding. Both sides supporting ΓÇ£A2AΓÇ¥ does **not** establish compatible wire bindings or protocol versions. The 2026-09-04/05 deployment observation confirmed an ingress contract but did not verify JSON-RPC versus HTTP+JSON compatibility. Treat that compatibility as unresolved and block delegation until current documentation or an interoperability test establishes it.
+
+The sessionΓÇÖs lifecycle, isolation, and identity semantics belong to the hosting layer rather than the agent. The surface reference records per-session sandbox isolation and caller-identifier propagation as observations dated 2026-09-04/05, not standing guarantees. A caller identifier is not delegated authority; acting as the user downstream still requires explicit consent.
+
+**Assurance.** Independently capture tool calls, retrieval inputs/results, handoff transitions, A2A discovery and delegation metadata, approvals, and outcomes. Evaluate retrieval against citation/grounding requirements, session behavior against within-interaction continuity, handoff against the intended routing boundary, and A2A against successful task/result exchange. Verify that the system has not silently become an open-ended peer conversation where bounded delegation was intended, and re-run these checks after framework, workflow, hosting, or peer-binding changes.
+
+**Confirmed versus unresolved surface facts.**
+
+- Confirmed in the dated surface reference: `AIAgent`, `AgentSession`, `AIContextProvider`, `TextSearchProvider`, `AgentWorkflowBuilder`, the workflows namespace, and the handoff builder name.
+- Unresolved: current framework availability/GA status; current ingress protocol naming; A2A wire-binding and version compatibility; and the exact MCP elicitation surface, which is not needed for this mapping.
+- No group-chat builder name is assumed or supplied. Group chat is a separate workflow orchestration and is not required by the approved decision.
+- If any selected component is currently preview rather than GA, record the resulting change/withdrawal risk and pin the exact validated SDK version or commit before implementation; the surface reference does not assert a stable preview component.
+

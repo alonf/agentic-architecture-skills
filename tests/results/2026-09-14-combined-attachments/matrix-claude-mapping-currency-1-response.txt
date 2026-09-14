@@ -1,0 +1,36 @@
+The decision arrived already approved as a single agent, so step 1 is satisfied and I did not re-derive it. One scope note before the mapping: handoff presupposes a second agent, which a single-agent decision does not include. I map it as a conditional extension, not a current construct.
+
+## Construct mapping (step 2)
+
+| Responsibility | Construct | Map row | Justifying property | Name status |
+| --- | --- | --- | --- | --- |
+| Conversational state across turns, within one interaction | `AgentSession` on the single `AIAgent` | 2 | Turn-to-turn continuity that ends when the interaction ends. It must not be conflated with cross-session recall, which is row 4 and is not in this decision. | Confirmed. The creation signature and the note that the older thread type is superseded live in the surface reference, dated 2026-09-14. |
+| Retrieval from a corpus | `AIContextProvider` backed by a search source such as `TextSearchProvider` | 3 | Retrieval is context injection kept outside the reasoning loop, so retrieved content stays attributable and citable rather than absorbed as prior knowledge. | Both names confirmed 2026-09-14. |
+| Optional handoff orchestration | A handoff orchestration built with the workflow package | Named, not demonstrated | Handoff is a workflow orchestration. Sequencing is deterministic even when a step inside it is agentic. | Builder name confirmed 2026-09-14 in the surface reference. The source material marks handoff as slide-only, so it is not demonstrated. The group-chat builder is a sibling orchestration whose name I am not asserting. |
+| Peer A2A delegation, binding not established | Agent-card discovery, then task delegation over A2A | 11 | The caller has a task and an eventual result, not a function signature. This presumes a real deployment and ownership boundary. | Concept-level only. The surface reference asserts no C# type for A2A, and wire-binding compatibility between hosted peers is recorded as unverified. |
+
+The agent itself maps to row 1. The client-to-agent adapter that creates it is named in the surface reference, dated 2026-09-13 and confirmed 2026-09-14.
+
+## Runtime, control, and assurance (steps 3 and 4)
+
+- **Hosting placement is undecided.** The decision does not say whether this agent runs in-process or in a hosted runtime. If hosted, per-session sandbox isolation applies, and the surface reference marks that as one spike's finding, not a standing guarantee.
+- **Session lifetime belongs to the hosting layer.** The session construct gives continuity within an interaction, but the design must not assume it outlives the host's idle and reclaim policy.
+- **Ingress and binding gate the A2A row.** Delegation is layered on the peer's ingress, and agent-card discovery is a separate step precisely because both sides supporting A2A does not imply a shared binding or protocol version. Discovery and a compatibility check must precede any delegation. Until that check passes, the design cannot assume delegation works.
+- **Identity across the peer boundary is open.** If the delegated task must act as the calling user, a propagated identifier is not a grant. That needs an explicit delegated-access consent step, and the decision does not say whether this applies.
+- **No human-authority layer is invoked.** None of the four responsibilities names a gate. If handoff is later adopted and a stage needs sign-off, it belongs at the workflow gate of row 8, not the per-call approval of row 9. I am not adding one.
+- **Observe:** capture retrieved passages, tool calls, session turn boundaries, any handoff transition, and the A2A task sent and result received, independently of the agent's narration.
+- **Evaluate:** check that answers cite retrieved content rather than paraphrase it, that state does not leak across interactions, and that delegated results are attributed to the peer.
+- **Verify behaviour:** if the agent never varies its next step, re-route down. If it hands off on every run, the decision has become multi-agent and must go back to the router.
+- **Regress:** re-run behavioural checks after any SDK move, given the recorded drift from the old thread type to the session type.
+
+## Dated facts and remaining uncertainties (steps 5 and 6)
+
+Every item below is referred to the surface reference and must be re-verified against live documentation before code or a final design.
+
+- **Framework availability for .NET is unverified.** The quick start still used a prerelease flag on 2026-09-13. Risk: a preview surface can change or be withdrawn before shipping. Pinning strategy: validate against one exact package version or SDK commit and treat any later change as a known diff.
+- **A2A binding compatibility is unverified.** Recorded as not established on 2026-09-04 and retained open on 2026-09-14. This blocks delegation until checked.
+- **Ingress protocol name is unverified.** The source material's name for it is recorded as an unverified claim.
+- **Handoff is confirmed by name but not demonstrated.** Adopting it also requires a router-level justification for the second agent.
+- **Group-chat builder name is unasserted.** It is not needed by this decision and I have not named it.
+- **Date anomaly in the surface reference.** Today is 2026-09-13, yet the maintainer confirmations are dated 2026-09-14. Treat those "confirmed" labels as dated claims to re-check, not as settled.
+- **Hosting placement and identity delegation** are open decisions the design owner must make.

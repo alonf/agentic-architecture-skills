@@ -1,0 +1,13 @@
+/ Search (glob)
+  Γöé "**/*"
+  Γöö 1 file found
+
+/ Search (grep)
+  Γöé "category|categories|unknown|support|label"
+  Γöö 1 line found
+
+ΓùÅ Read prompt.txt
+  Γöö 1 line read
+
+unknown
+

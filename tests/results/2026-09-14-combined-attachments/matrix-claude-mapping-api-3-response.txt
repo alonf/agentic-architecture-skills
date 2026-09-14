@@ -1,0 +1,42 @@
+The mapping is complete. The prompt file in the working directory matches the request verbatim, so the supplied decision is the only input and nothing in the repository conflicts with it.
+
+**Result:** the log-reading responsibility maps to a function tool over the other team's existing typed API, bound to a single `AIAgent`. It does not map to an MCP client, and it needs no approval construct because the tool is read-only.
+
+## Construct mapping (steps 1 and 2)
+
+Step 1 is satisfied. The router supplied a single-agent decision with an explicit no-MCP ruling and its reason, so nothing is re-derived here.
+
+| Responsibility | Construct | Property that justifies it |
+|---|---|---|
+| Adaptive investigation of failed batch jobs | `AIAgent` with a C# method bound as its tool (row 1) | The mechanism decides from its own intermediate findings what to examine next. |
+| Reading logs through the other team's typed API | Function tool over the existing typed API (the "not MCP" row) | No MCP-specific property was recorded, so the existing API boundary is preserved. |
+| Continuity across operator turns, only if the investigation spans turns | `AgentSession` (row 2) | Turn continuity within one interaction, not durable memory. |
+
+**Why a function tool and not `McpClient`.** Row 6 requires one of three recorded properties: a contract discovered at run time because it changes independently, several agents or hosts consuming it through one protocol boundary, or a provider that only exposes MCP. The router found none. Another team's ownership alone does not earn the row. A function tool keeps the typed contract compile-time bound and leaves the API boundary where it already sits, with the other team.
+
+**Read-only is enforced at the binding, not in the prompt.** Only the read operations of the typed client are bound as tools. The agent's authority is then bounded by what it can call, which is why row 9 per-call approval does not apply.
+
+**Rows deliberately not mapped.** Row 3 does not fit because the agent chooses which logs to fetch based on findings, which is a call, not pre-turn context injection. Rows 6, 7, 8 and 9 do not apply for the reasons above.
+
+## Runtime, control and assurance (steps 3 and 4)
+
+- **Hosting placement is not in the supplied decision.** The construct is identical in-process or hosted. In-process, the typed client is an ordinary dependency. Hosted, the per-session sandbox needs network egress to the other team's API and a credential inside it.
+- **Identity against the log API must be decided.** A service identity with read scope is the simplest fit. If the log API authorises per user, acting as the operator needs an explicit delegated-access consent step, because a propagated identifier is not a grant.
+- **Human authority: none of the three layers applies.** No workflow gate, no per-call approval, and consent only if the identity question above resolves to acting-as-user. Record this as a decision, not an omission.
+- **Lifecycle.** If hosted, one investigation must complete within the runtime's idle and reclaim policy, which the agent does not control.
+- **Observe** every tool call at the tool boundary with arguments and responses, independent of the agent's narration.
+- **Evaluate** against a set of previously failed jobs with known causes, since that is the requirement the agent was routed for.
+- **Verify behaviour** in three directions. If traces show the same call sequence every run, the responsibility is over-routed and goes back to the router. If a second consumer appears or the contract starts changing independently, the no-MCP ruling must be revisited. Confirm the bound surface has stayed read-only.
+- **Regress** on the other team's releases. Compile-time typing catches shape changes but not semantic ones such as a changed log format.
+
+## Dated facts and open questions (steps 5 and 6)
+
+These come from the surface file and were not re-verified against live documentation in this session. Confirm each before it reaches a design document.
+
+- `AIAgent` and the adapter `AIProjectClient(...).AsAIAgent(...)` in namespace `Microsoft.Agents.AI` were read on 2026-09-13 and confirmed by the maintainer on 2026-09-14.
+- The factory that turns a C# method into a tool is not carried in the surface file. Its name is an open question, not asserted here. That `AIFunction` is the base tool type is inferred only from the MCP note.
+- .NET availability status is unverified as of 2026-09-13, and the quick start adds the Foundry package with a prerelease flag. Risk: the surface can change before the design ships. Pinning strategy: validate against one exact package version and treat any later change as a known diff.
+- `AgentSession` via `CreateSessionAsync` was confirmed on 2026-09-14 and only matters if the investigation is multi-turn.
+- Per-session sandbox isolation and identifier-not-grant propagation were observed on 2026-09-04 and 2026-09-05 and are marked unsure.
+
+Three questions need the decision owner: hosting placement, the identity the tool uses against the log API, and whether one investigation is a single run or an operator conversation. No directives were found in repository content, so no conflicts are surfaced.

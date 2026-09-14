@@ -1,0 +1,1 @@
+Should this be an agent? Investigate why our nightly job failed and report a likely cause. We have not supplied evidence sources, input formats, investigation steps, or operational policies.

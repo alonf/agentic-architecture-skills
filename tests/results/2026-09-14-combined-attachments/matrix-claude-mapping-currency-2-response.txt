@@ -1,0 +1,42 @@
+Mapping complete for the four stated responsibilities. The supplied decision satisfies step 1, so I did not re-derive it. One reservation: handoff introduces a second agent, so the "optional" handoff only activates if the router recorded an agent boundary that justifies that second agent. I mapped it conditionally rather than guessing.
+
+## Construct mapping (step 2)
+
+| Responsibility | Construct | Name status | Justifying property |
+|---|---|---|---|
+| The agent itself | `AIAgent`, created through the client-to-agent adapter | Type confirmed by maintainer. Adapter form is dated in the surface file. | Row 1. The mechanism decides at run time what to examine next. |
+| Conversational state across turns, one interaction | `AgentSession`, created by the agent's session-creation call | Confirmed 2026-09-14. The older thread type is recorded as superseded. | Row 2. Continuity ends with the interaction and must not become cross-session recall, which is row 4. |
+| Retrieval from a corpus | `AIContextProvider` backed by a search source such as `TextSearchProvider` | Both confirmed. | Row 3. Retrieval is context injection kept attributable and citable, outside the reasoning loop. |
+| Optional handoff orchestration | Workflow orchestration in the workflows package, via the handoff builder | Package and handoff builder confirmed 2026-09-14. The source material names handoff but does not demonstrate it. | Row 8 package. Conditional on a router-justified second agent. |
+| Peer A2A delegation | Agent-card discovery, then task delegation | Protocol-level construct. No C# type asserted. | Row 11. The caller holds a task, not a signature, and the peer sits behind a real ownership boundary. |
+
+Rows deliberately not mapped: no cross-session memory, no MCP client because no MCP-specific property was recorded, no per-call approval because no consequential tool call is stated, and no agent-as-tool because delegation was chosen over consultation. Group chat is outside this decision, and its builder name stays unasserted.
+
+## Runtime and control (step 3)
+
+- **Hosting placement is open.** The decision does not say whether this agent runs in-process or in a hosted runtime. The peer is hosted elsewhere by definition. This choice sets isolation and session lifecycle, so it must be resolved before the row 2 design is final.
+- **Binding is a gate, not a detail.** A2A layers on the peer's ingress. Wire-binding compatibility between two peers is recorded as unverified. Agent-card discovery must run as a mandatory step before any delegation, and the design must fail closed on a binding or version mismatch.
+- **Session lifecycle belongs to the host.** The agent session must not be assumed to outlive the hosting layer's idle and reclaim policy.
+- **Delegation carries a task, not a credential.** If the peer must act as the calling user, that needs an explicit delegated-access consent step. A propagated identifier does not grant it.
+- **No human-authority layer is invoked.** None of the four responsibilities asks for sign-off. If one emerges, name which of the three layers applies: workflow gate, per-call approval, or consent.
+
+## Assurance and open items (steps 4 to 6)
+
+Assurance concerns that apply:
+
+- **Observe.** Capture retrieved passages with source attribution, session turns, handoff transitions, and the discovery result plus task outcome for each delegation, independently of the agent's own narration.
+- **Evaluate.** Citations must trace to the corpus. State must be present within the interaction and absent after it. Delegated tasks must return a result the caller can act on.
+- **Verify behaviour.** If the agent never varies its next step, re-route it down. If handoff is never exercised, drop it rather than keep it.
+- **Regress.** Re-run behavioural checks after any SDK change. The prerelease flag below makes this urgent.
+
+Dated facts and uncertainties carried from the surface reference:
+
+- **Framework availability for .NET is unverified.** The C# quick start still adds the Foundry package with a prerelease flag. Risk: the surface can change or be withdrawn before this ships. Pinning strategy: validate against one exact package version or SDK commit and treat any later change as a known diff.
+- **A2A binding compatibility is unverified.** The ingress observation dates to 2026-09-04, and the question was retained open on 2026-09-14.
+- **The ingress protocol name is unverified.** The source material's name for it should not be repeated as current.
+- **The isolation model was one spike's finding, not an SLA.** Re-check before citing it in the hosting decision.
+- **Handoff is confirmed by name only.** The source material does not stage it, so no demonstration backs it.
+- **Group-chat builder and MCP elicitation surface remain unasserted.** Neither is needed here.
+- **Dating inconsistency.** The surface file records the maintainer confirmation on 2026-09-14, one day after today's date. Reconcile that before citing any of the confirmed names as verified.
+
+Signatures, namespaces, and status claims for every name above live only in the surface reference and must be re-verified against live documentation before code or a final design document. Architecture review is required before implementation.

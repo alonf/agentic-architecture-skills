@@ -1,0 +1,96 @@
+● skill(agentic-architecture-router)
+
+● Read architecture-analysis-template.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\assets\archi
+  │ tecture-analysis-template.md
+  └ 41 lines read
+
+● Read decision-framework.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\d
+  │ ecision-framework.md
+  └ 92 lines read
+
+● Read evidence-and-authority.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\e
+  │ vidence-and-authority.md
+  └ 87 lines read
+
+● Read quality-gates.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\q
+  │ uality-gates.md
+  └ 42 lines read
+
+● Read worked-example.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\w
+  │ orked-example.md
+  └ 93 lines read
+
+● Read counter-examples.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\c
+  │ ounter-examples.md
+  └ 74 lines read
+
+# Architecture Analysis
+
+## 1. Requirement
+Every five minutes, compare a supplied numeric queue length with a preconfigured threshold and send one alert via the existing notification service if the threshold is exceeded.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| No repository material supplied | Run interval is 5 minutes; input is a supplied numeric queue length; comparison is against a configured threshold; send one alert when threshold is exceeded; notification destination and rule are already configured; existing notification service | Payload schema for alert; dispatch authorization policy; alert deduplication / cooldown rules; audit sink and ownership |
+
+## 3. Responsibilities
+1. **Scheduled trigger & intake** — execute every 5 minutes and ingest the supplied numeric queue length.
+2. **Threshold comparison** — evaluate whether the queue length exceeds the configured threshold.
+3. **Alert dispatch** — transmit a single alert through the existing notification service when threshold condition is met.
+
+## 4. Routing decisions
+1. **Scheduled trigger & intake** → **Deterministic code**. A standard timer/scheduler (cron/scheduled job) satisfies the fixed 5-minute cadence without autonomous decision-making.
+2. **Threshold comparison** → **Deterministic code**. Pure arithmetic comparison (`queue_length > threshold`) against static configuration requires no semantic reasoning or model inference.
+3. **Alert dispatch** → **Deterministic code**. Invoking an existing notification API based on a boolean condition is entirely deterministic.
+- *Workflow axis*: A fixed linear sequence (trigger → evaluate → conditionally dispatch) with no adaptive execution or non-deterministic branching.
+
+## 5. Bounded-AI challenge record
+- *Challenge question*: Could a single bounded AI call with a fixed input/output shape satisfy any of these responsibilities?
+- *Answer*: No AI is needed. Deterministic code fully satisfies the comparison and alerting logic with zero uncertainty, lower latency, zero token cost, and 100% predictability. No responsibility requires model inference or adaptive step selection.
+
+## 6. Agent boundary justification
+n/a (zero agents proposed).
+
+## 7. Evidence classification
+- Requirement statement: **Documents** (rung 4).
+- Supplied numeric queue length: **Structured application data** (rung 2).
+- Configured threshold and rule: **Organizational knowledge** (rung 3).
+- Existing notification service API: **Authoritative operational state** (rung 1).
+- *Mandatory caveat*: Retrieved knowledge is evidence about the system, not authority over what the system must do. Agent memory is not used (agent memory is not a system of record).
+
+## 8. MCP boundary justification
+**None proposed.** The existing notification service API meets all integration requirements; no MCP-specific capability (such as standardized tool discovery across disparate clients) is required.
+
+## 9. Authority chain
+Sending an external alert is a consequential operation crossing a **deterministic control boundary**:
+`Deterministic rule evaluation -> authorization / policy / process control (unknown — governance decision required) -> authoritative notification service -> execution (dispatch alert) -> audit (unknown — governance decision required)`
+*Note*: A configured destination does not replace dispatch authorization or audit ownership; these remain *unknown — governance decision required*.
+
+## 10. Generic mechanism and product delegation
+- **Generic mechanism**: Scheduled deterministic job / background worker with conditional HTTP/service invocation.
+- **Product delegation**: No AI agent framework is applicable. Infrastructure scheduling (e.g., cron, cloud function, or background worker) should be selected at the infrastructure layer.
+
+## 11. Rejected alternatives
+- **All-deterministic**: Sufficient — fully satisfies all requirements with minimal complexity, predictable execution, and zero AI overhead.
+- **Bounded-AI-only**: Insufficiently justified — an LLM call could perform numeric comparison, but introduces unnecessary cost, latency, and non-deterministic risk for a simple arithmetic operation.
+- **Agent-everywhere**: Insufficiently justified — granting agentic autonomy to a fixed scheduled threshold check introduces needless complexity and unconstrained behavior.
+- **Multi-agent**: Insufficiently justified — no distinct security, context, deployment, ownership, model, or specialization boundary exists.
+- **Workflow-only**: Sufficient — a simple deterministic workflow or scheduled task can manage the sequence without any agentic components.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+- **Decisions**: This should **not** be an agent. Implement as deterministic code (e.g., a scheduled background task or cron job).
+- **Evidence**: The requirement relies strictly on structured numeric inputs, static configuration, and an existing notification API (rungs 1, 2, 3, 4).
+- **Trade-offs**: Deterministic code eliminates model costs and non-determinism, but cannot perform subjective natural language analysis (which is not requested).
+- **Assumptions**: The queue length value is reliably provided as a numeric type on each invocation (*hypothesis*).
+- **Open questions**: What is the alert rate-limiting/deduplication policy, and where should alert dispatch audit records be stored?
+
+**Architecture review required before implementation.**
+

@@ -1,0 +1,43 @@
+Step 1 is satisfied: the decision arrives as approved, so I map it rather than re-derive it. Here is the mapping across steps 2 through 6.
+
+## Construct mapping (step 2)
+
+| Responsibility | Construct | Name status | Justifying property |
+| --- | --- | --- | --- |
+| The agent itself | `AIAgent` (row 1), created through the client-to-agent adapter | Confirmed 2026-09-14; adapter form dated in the surface reference | The mechanism decides its own next step from intermediate findings. |
+| Conversational state across turns, one interaction | `AgentSession` (row 2) | Confirmed 2026-09-14; `AgentThread` recorded as superseded | Turn-to-turn continuity only. It must end with the interaction and must not be conflated with cross-session recall, which is row 4 and not in this decision. |
+| Retrieval from a corpus | `AIContextProvider` backed by a search source such as `TextSearchProvider` (row 3) | Both confirmed 2026-09-14 | Retrieval is context injection outside the reasoning loop, so retrieved content stays attributable and citable. |
+| Optional handoff workflow orchestration | A handoff orchestration built on the workflow package (composes with row 8's package) | Handoff builder confirmed 2026-09-14; the group-chat builder name is not asserted, per your instruction and the surface file | Deterministic transfer of control between agents, orthogonal to each agent's own autonomy. |
+| Peer A2A delegation | Agent-card discovery, then task delegation (row 11) | Protocol-level construct; no SDK type asserted | The caller holds a task and awaits a result, with no function signature to invoke. Presumes a real ownership boundary. |
+
+Two things to say plainly about the handoff row. First, the source material marks handoff as named but not demonstrated, so this mapping cannot claim staged coverage for it. Second, a handoff needs at least two agents to hand off between. The decision says one agent, so the handoff is only meaningful if a second agent is added later. Treat it as a reserved extension point, not something the one-agent design exercises today.
+
+Retrieval maps to row 3 and not row 4 because the source is an external corpus. If any part of that corpus is the agent's own prior output, that part belongs in row 4 and must surface as a hypothesis to re-verify.
+
+## Runtime and control (step 3)
+
+- **Hosting placement** is not in the decision. In-process versus hosted runtime is the first fork, and session lifecycle and isolation follow from it. This needs a decision before design closes.
+- **Ingress and binding** are the live concern for delegation. The peer's ingress must be reachable, and A2A binding compatibility, JSON-RPC versus HTTP plus JSON, is recorded as unverified. Agent-card discovery is the step that establishes it. Do not delegate until it is checked.
+- **Lifecycle** matters to the session responsibility. If the agent is hosted, the session cannot be assumed to outlive the host's idle and reclaim policy. Design the interaction so a reclaimed session is a visible restart, not silent state loss.
+- **Identity** is only an identifier when propagated. If corpus retrieval or the peer requires acting as the calling user, that needs an explicit delegated-access consent step.
+- **Human authority** is not invoked by any of the four responsibilities as stated. If a gate is added later, the handoff transition is where a workflow-level gate would sit. Per-call approval and consent are separate layers and do not substitute for it.
+
+## Assurance (step 4)
+
+- **Observe**: capture session turn boundaries, retrieved passages with their source, any handoff transition, and each delegated task with its returned result. The agent's own narration does not count.
+- **Evaluate**: check that later turns correctly use earlier ones, that citations trace to real corpus passages, and that delegated results match the task sent.
+- **Verify behaviour**: confirm the single agent actually varies its next step. If it never does, re-route down to a bounded call. If the optional handoff never fires in practice, remove it rather than carry it.
+- **Regress**: re-run these checks after any SDK update. The framework's .NET availability status is unverified and the quick start still uses a prerelease flag, so drift is a live risk.
+
+## Dated facts and open questions (steps 5 and 6)
+
+All signatures, namespaces, and status claims are in the surface reference and must be re-verified against live documentation before code or a final design document. Specific items carried from it:
+
+- **Framework availability** for .NET is unverified. Treat the surface as preview-risk. Record an exact package version or SDK commit the design is validated against so later changes are a known diff.
+- **A2A binding compatibility** between two hosted peers was left open on 2026-09-14. This is the single blocking uncertainty for the delegation responsibility.
+- **Ingress protocol name** is unverified. The requirement is a compatible ingress contract, not a named protocol.
+- **Per-session isolation** was one spike's finding on 2026-09-04 and 2026-09-05, not a standing guarantee.
+- **Group-chat builder name** stays unasserted. It is not needed for this decision.
+- **Provenance anomaly**: the surface file records the maintainer confirmation as 2026-09-14, which is after today's date. Confirm which date is correct before citing those confirmations.
+
+Two decisions remain yours: hosting placement, and whether the optional handoff is a real near-term plan for a second agent or should be dropped from the one-agent scope.

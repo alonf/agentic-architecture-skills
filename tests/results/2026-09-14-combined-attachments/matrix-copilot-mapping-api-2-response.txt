@@ -1,0 +1,44 @@
+ΓùÅ skill(maf-architecture-mapping)
+
+ΓùÅ Read runtime-and-control.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\runtime-and-control.md
+  Γöö 62 lines read
+
+ΓùÅ Read construct-map.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\construct-map.md
+  Γöö 67 lines read
+
+ΓùÅ Read assurance.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\assurance.md
+  Γöö 55 lines read
+
+ΓùÅ Read maf-surface.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\maf-surface.md
+  Γöö 116 lines read
+
+**Step 2 ΓÇö Responsibility-to-construct mapping**
+
+| Responsibility | Microsoft Agent Framework construct | Justification |
+|---|---|---|
+| Adaptively investigate failed batch jobs | `AIAgent` with a C# callable function tool | The agent must decide at runtime which logs or evidence to inspect next based on intermediate findings. That is agent-level autonomy rather than a fixed workflow or bounded model call. |
+| Read batch-job logs through the existing typed API | A function tool wrapping the existing typed API | The API is callable, already typed, and owned by another team. Preserve that API boundary and expose only read-only operations as the tool surface. Ownership alone does **not** justify MCP. |
+| MCP boundary decision | **No `McpClient`** | The router explicitly found no MCP-specific property: no need for runtime contract discovery, shared MCP interoperability, or an MCP-only provider boundary. Therefore, the existing typed API should remain a normal function tool. |
+
+This is not the agent-as-tool construct: the external dependency is a callable logs API, not a second agent receiving delegated tasks.
+
+**Step 3 ΓÇö Runtime and control placement**
+
+The hosting choice remains a separate architectural decision: determine whether the agent runs in-process or in a separately hosted runtime. In either case, the tool must enforce read-only access through its API permissions and exposed operations. The agent should not receive write-capable credentials merely because the underlying service supports writes. If the API requires caller identity propagation, distinguish an identifier from delegated authorization; acting as the caller requires an explicit consent mechanism.
+
+**Step 4 ΓÇö Assurance**
+
+Observe tool invocations, arguments, returned log evidence, intermediate decisions, and failures independently of the agentΓÇÖs summary. Evaluate whether investigations identify the relevant failed batch and support the required diagnosis. Verify that the agent genuinely needs adaptive next-step selection; if its sequence becomes fixed, reconsider routing it to a deterministic workflow. Regress after changes to the typed API, log schema, permissions, or agent instructions.
+
+**Steps 5ΓÇô6 ΓÇö Dated facts and open questions**
+
+The skill references `AIAgent` and the function-tool pattern; exact package, namespace, and adapter details must be re-verified against current Microsoft Agent Framework documentation before implementation. No preview dependency is required by this mapping. Open questions are the hosting placement, session-lifetime requirement, API authentication model, and the precise read-only operations to expose.
+

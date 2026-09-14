@@ -1,0 +1,26 @@
+ΓùÅ skill(agentic-architecture-router)
+
+ΓùÅ Read quality-gates.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\quality-gates.md
+  Γöö 42 lines read
+
+ΓùÅ Read decision-card-template.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\assets\decision-card-template.md
+  Γöö 16 lines read
+
+# Decision Card
+
+Mode: Decision Card  
+Requirement: Every five minutes, compare a supplied numeric queue length with the configured threshold and send one alert through the existing notification service when exceeded.  
+Known facts: The comparison rule, threshold, alert destination, and notification service are already configured; the requirement text is the only supplied system evidence.  
+Unknown / assumptions: ΓÇ£One alertΓÇ¥ means at most one alert per five-minute evaluation; cross-interval deduplication, failure handling, and authorization policy are unknown; responsibilities are polling, comparison, and notification.  
+Routed mechanism: Deterministic scheduled workflow; compare numbers and invoke the existing service directly. The bounded-AI challenge failsΓÇöAI adds no value to fixed arithmetic or routing.  
+Agent boundary: No agent; no autonomy or reasoning is required. No MCP boundary; retain the existing notification API/service because no tool-discovery or cross-system protocol property is needed.  
+Evidence classification: Requirement text = Documents (rung 4); configured runtime rule, threshold, destination, and service are described but not observed; no memory or retrieved knowledge is authoritative.  
+Authority chain: Reasoning: fixed threshold comparison ΓåÆ authorization: unknown - governance decision required ΓåÆ authoritative service: existing notification service ΓåÆ execution: send one permitted alert ΓåÆ audit: record evaluation, outcome, and delivery result.  
+Rejected alternatives: all-deterministic: sufficient and preferred; bounded-AI-only: unnecessary for deterministic logic; agent-everywhere: insufficiently controlled and adds cost; multi-agent: unjustified coordination; workflow-only: sufficient as orchestration, with deterministic comparison and notification steps.  
+Decision and trade-off: Use a five-minute scheduled deterministic workflow with one notification attempt per exceeded evaluation; this minimizes complexity and variance, while deduplication and failure/retry policy remain governance decisions.  
+**Architecture review required before implementation.**
+

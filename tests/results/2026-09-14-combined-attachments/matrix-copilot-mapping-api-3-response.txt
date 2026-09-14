@@ -1,0 +1,50 @@
+ΓùÅ skill(maf-architecture-mapping)
+
+ΓùÅ Read construct-map.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\construct-map.md
+  Γöö 67 lines read
+
+ΓùÅ Read assurance.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\assurance.md
+  Γöö 55 lines read
+
+ΓùÅ Read runtime-and-control.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\runtime-and-control.md
+  Γöö 62 lines read
+
+ΓùÅ Read maf-surface.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\maf-surface.md
+  Γöö 116 lines read
+
+**Step 1 ΓÇö Approved mechanism decision**
+
+The router has already approved a **single read-only agent** because the investigation is adaptive: it decides at runtime which failed-job evidence to inspect next based on intermediate findings. The router also explicitly rejected an MCP boundary because no MCP-specific property is required.
+
+**Step 2 ΓÇö Responsibility-to-construct mapping**
+
+| Responsibility | Microsoft Agent Framework construct | Justification |
+|---|---|---|
+| Adaptively investigate a failed batch job | `AIAgent` with a callable tool | The agent must choose its next investigative action from its findings, which requires an agent loop rather than a fixed workflow or bounded model call. |
+| Read logs through the existing typed API | **Function tool over the existing typed API** | The API is already callable and typed. Cross-team ownership alone does not justify MCP; preserving the existing API boundary avoids unnecessary protocol discovery and translation. The tool must expose read-only operations only. |
+| Enforce the approved read-only scope | Tool/API contract and downstream authorization | The callable surface should make mutation impossible or unavailable to the agent. Authorization remains enforced by the existing API/service, not by MCP. |
+
+Do **not** map this responsibility to `McpClient`: the required MCP-specific property is absent. Do not map it to agent-as-tool or A2A; the log service is an API capability, not another peer agent.
+
+**Step 3 ΓÇö Runtime and control**
+
+Hosting is a separate decision and is not specified by the architecture decision. Choose either in-process hosting or a separately hosted runtime based on required isolation, lifecycle, identity propagation, and operational ownership.
+
+The API call should use the agent runtimeΓÇÖs service identity or an explicitly governed delegated identity. A caller identifier alone must not be treated as permission to act as that caller. No human-authority construct is required for strictly read-only log retrieval; if investigation later gains consequential operations, route those operations to the appropriate per-tool approval or workflow gate.
+
+**Step 4 ΓÇö Assurance**
+
+Capture execution evidence independently of the agentΓÇÖs summary: selected tool calls, arguments, returned log references, failures, and timing. Evaluate whether the investigation identified the required failure evidence while remaining read-only. Verify that the agent still genuinely needs adaptive next-step selection; if its sequence becomes fixed, re-route it to deterministic orchestration. Regress these checks whenever the typed API, tool surface, prompts, or model changes.
+
+**Step 5ΓÇô6 ΓÇö Dated facts and open questions**
+
+The reference surface identifies `AIAgent` and the `AIProjectClient(...).AsAIAgent(...)` adapter, but all current SDK names, signatures, package versions, and availability claims must be re-verified against live Microsoft Agent Framework documentation before implementation. The frameworkΓÇÖs .NET availability is currently marked **unverified**; no preview component is asserted for this mapping, so no pinning strategy is specified beyond validating the chosen SDK version before development.
+

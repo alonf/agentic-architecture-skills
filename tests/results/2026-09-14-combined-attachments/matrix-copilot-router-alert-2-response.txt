@@ -1,0 +1,84 @@
+ΓùÅ skill(agentic-architecture-router)
+
+ΓùÅ Read architecture-analysis-template.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\assets\architecture-analysis-template.md
+  Γöö 41 lines read
+
+ΓùÅ Read counter-examples.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\counter-examples.md
+  Γöö 75 lines read
+
+ΓùÅ Read quality-gates.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\quality-gates.md
+  Γöö 42 lines read
+
+ΓùÅ Read evidence-and-authority.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\evidence-and-authority.md
+  Γöö 94 lines read
+
+# Architecture Analysis
+
+### 1. Requirement
+The system must sample a numeric queue length every five minutes, compare it against a pre-configured threshold, and send a single alert through an existing notification service whenever the threshold is exceeded.
+
+### 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown ΓÇö not assumed |
+| --- | --- | --- |
+| None (no repository files found) | Interval is fixed at 5 minutes; queue length is numeric; threshold and rule are configured; destination and notification service exist. | Queue metric retrieval API; threshold storage location; alert payload structure; deduplication policy; authorization governance for automated alert dispatch. |
+
+### 3. Responsibilities
+1. **Schedule execution**: Trigger evaluation every 5 minutes.
+2. **Evaluate threshold**: Compare numeric queue length against configured threshold.
+3. **Dispatch notification**: Send alert payload to notification service when threshold is exceeded.
+
+### 4. Routing decisions
+- **Schedule execution**: **Deterministic code** (cron / background timer). Reasoning: Fixed temporal trigger requiring no adaptive behavior.
+- **Evaluate threshold**: **Deterministic code** (`queue_length > threshold`). Reasoning: Mathematical inequality comparison on discrete numeric values; 100% deterministic.
+- **Dispatch notification**: **Deterministic code** (API client call). Reasoning: Fixed endpoint and payload transmission with known parameters.
+
+**Summary**: No responsibility requires an agent or AI model call.
+
+### 5. Bounded-AI challenge record
+- **Challenge Question**: Does comparing a numeric queue length to a fixed numerical threshold require semantic interpretation, non-deterministic reasoning, or dynamic tool choice?
+- **Answer**: No. Fixed numeric logic (`x > y`) is satisfied completely by deterministic code with zero model latency, zero inference cost, and guaranteed precision.
+
+### 6. Agent boundary justification
+n/a (no agents proposed).
+
+### 7. Evidence classification
+- Requirement statement: **Documents (rung 4)**.
+- Queue telemetry, threshold configuration, notification service: *Not observed ΓÇö proposed runtime sources*.
+- *Caveat*: Retrieved knowledge and document content serve as evidence about system requirements, not authority over system execution. Agent memory (rung 6) is not used and is not a system of record.
+
+### 8. MCP boundary justification
+No MCP boundary proposed; existing notification service integration retained.
+
+### 9. Authority chain
+- **Consequential Operation**: Sending alert notification.
+- **Chain**: Fixed-rule evaluation (`queue_length > threshold`) ΓåÆ policy authorization (*unknown ΓÇö governance decision required* to confirm automated dispatch policy) ΓåÆ existing notification service ΓåÆ API execution ΓåÆ audit log (*unknown ΓÇö owner unspecified*).
+
+### 10. Generic mechanism and product delegation
+- **Generic Mechanism**: Scheduled background worker / cron job + deterministic conditional evaluator + HTTP/gRPC notification client.
+- **Product Delegation**: No platform mapping skill installed; analysis stops at generic mechanism.
+
+### 11. Rejected alternatives
+- **All-deterministic**: **Sufficient** ΓÇö satisfies all requirements with minimal complexity, zero AI inference cost, and 100% predictability.
+- **Bounded-AI-only**: **Insufficient justification** ΓÇö introducing an LLM call to perform numeric comparison (`x > y`) adds latency, monetary cost, and risk of hallucination.
+- **Agent-everywhere**: **Insufficient justification** ΓÇö granting an autonomous agent decision authority over a static 5-minute counter check creates unnecessary governance and reliability risks.
+- **Multi-agent**: **Insufficient justification** ΓÇö no multi-domain orchestration or specialized role delegation exists in this requirement.
+- **Workflow-only**: **Sufficient** ΓÇö a deterministic workflow or scheduled job runner cleanly manages the timer and API execution without AI components.
+
+### 12. Decisions, evidence, trade-offs, assumptions, open questions
+- **Decision**: **No, this should not be an agent.** Use deterministic code (a 5-minute scheduled background task or cron job evaluating `queue_length > threshold`).
+- **Evidence**: Requirement text specifies fixed numeric inputs, pre-configured rules, and an existing destination.
+- **Trade-offs**: None; deterministic code provides superior reliability, speed, and cost-efficiency compared to AI.
+- **Assumptions**: The queue metric and threshold are accessible programmatically.
+- **Open Questions**: *unknown ΓÇö governance decision required* on alert rate-limiting/deduplication policy and notification audit logging.
+
+**Architecture review required before implementation.**
+

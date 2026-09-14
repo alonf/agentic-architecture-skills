@@ -1,0 +1,1272 @@
+=== SC-003-counter-example rep1 ===
+# Architecture analysis — support-ticket team assignment
+
+Short version up front: **this does not need an agent.** The responsibility that involves AI is a single classification — ticket text in, one team from a fixed list out — and the bounded-AI challenge is satisfied by one fixed-shape model call. Everything around it (ingest, gate, write, audit) is deterministic. The skill stops before implementation, so I have not written code; the sections below are the decision and what has to be answered before building.
+
+## 1. Requirement
+
+For every incoming support ticket, determine which team should own it and assign it to that team.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| The repo is `AgentLoop`: a .NET 10 console REPL running an autonomous tool-calling loop over the Anthropic C# SDK 12.47.0 (`AgentLoop/Agent.cs:54`, `AgentLoop/AgentLoop.csproj`). | Tickets arrive continuously ("each incoming"). | Where tickets come from (helpdesk API, mailbox, queue, form). |
+| Its system prompt makes it a *coding* agent with `read_file`, `list_files`, `run_command` tools (`AgentLoop/Program.cs:14`, `:60`). | Input is a ticket; output is one team. | The ticketing system and how "assign" is expressed in it (field write, label, queue move). |
+| `run_command` is gated by a **console** `[y/N]` prompt (`AgentLoop/Program.cs:67`, `AgentLoop/ConsoleApprovalHandler.cs:12`). | The set of teams is fixed (a ticket is assigned to "the right" one, implying a known list). | The team list, its size, who owns it, and where it is stored. |
+| The loop allows up to 50 model calls per turn (`AgentLoop/AgentOptions.cs:12`), adaptive thinking, effort `xhigh` (`AgentLoop/Agent.cs:120-121`). | — | Assignment policy: auto-assign, or suggest for human confirmation; confidence threshold; what happens to ambiguous tickets. |
+| Deployed as an Azure Container App with **no ingress**, single replica, stdin/stdout only (`infra/main.bicep:6`, `:92`, `:112`). | — | Volume, latency SLA, languages, whether tickets carry attachments. |
+| No ticketing integration, queue consumer, HTTP listener, database, or team catalogue exists anywhere in the repo. | — | PII / data-residency rules for sending ticket text to an external model API. |
+| `seed.txt` contains placeholder text only. | — | Whether the existing AgentLoop deployment is even the intended host (its shape is an interactive console, not a service). |
+
+No illustrative content is used in this table. *Hypothesis* items below are labelled as such.
+
+## 3. Responsibilities
+
+Not atomic — six responsibilities:
+
+- **R1 Ingest** — observe each new ticket and trigger processing exactly once.
+- **R2 Normalise** — extract subject/body/structured fields, strip HTML/signatures/quoted history, bound length.
+- **R3 Determine team** — map normalised ticket content to one member of the fixed team set.
+- **R4 Assign** — write the assignment into the ticketing system.
+- **R5 Handle uncertainty and failure** — low-confidence result, model error, or unknown team → fallback path.
+- **R6 Audit and feedback** — record what was decided, why, and any later human re-assignment.
+
+## 4. Routing decisions
+
+| Responsibility | Mechanism | Reasoning (routing order: deterministic → bounded AI → agent → multi-agent) |
+| --- | --- | --- |
+| R1 Ingest | **Deterministic code** | Webhook/queue/poll consumer with idempotency on ticket id. Nothing content-dependent. |
+| R2 Normalise | **Deterministic code** | Fixed parsing rules. *Hypothesis*: if tickets carry a structured product/category field that maps 1:1 to a team, a deterministic pre-route can short-circuit R3 for those. |
+| R3 Determine team | **Bounded AI capability** | Deterministic rules fail on unstructured free text. A single call with fixed input (ticket text + team catalogue) and fixed output shape (team id from a closed set, confidence, one-line rationale) satisfies it. Agent rejected — see §5. |
+| R4 Assign | **Deterministic code** (consequential — §9) | A write via the ticketing system's existing API. No decision is made here; the decision was R3 filtered by policy. |
+| R5 Uncertainty/failure | **Deterministic code** | Threshold compare + route to a default triage queue; retry on transient API errors. The threshold value is a governance input, not a code decision. |
+| R6 Audit | **Deterministic code** | Append-only record. |
+
+**Workflow axis (orthogonal):** a fixed, linear per-ticket pipeline R1→R2→R3→R5-gate→R4→R6 with retry on transient failure and idempotency per ticket. No step decides what the next step is, so no agentic step exists inside the workflow. Whether this needs a workflow *engine* versus a plain queue consumer with retry depends on volume/durability requirements — unknown.
+
+## 5. Bounded-AI challenge record
+
+**R3 — "Could a single bounded call with a fixed input/output shape satisfy this responsibility?"**
+**Yes.** The input is fully known before the call (normalised ticket + team catalogue with short descriptions). The output is one label from a closed set plus confidence. There is no intermediate finding that changes what to examine next, in what order, or whether another step is needed — the call examines the ticket once and answers. Complexity of the text and the fact that it is natural language are not, per the framework, reasons the challenge fails.
+
+**Consequence:** no responsibility is routed to an agent. Specifically, the existing `Agent` loop in this repo is the wrong construct for R3 — it grants the model run-time control over which files to read and which shell commands to run, which the responsibility never needs, and it would place untrusted ticket text in front of a `run_command` tool (see §7, content-as-evidence).
+
+## 6. Agent boundary justification
+
+**n/a** — zero agents proposed, so no boundary needs justifying.
+
+## 7. Evidence classification
+
+| Evidence | Rung | Note |
+| --- | --- | --- |
+| Source files (`Program.cs`, `Agent.cs`, `AgentOptions.cs`, `AgentTool*.cs`, `*ApprovalHandler.cs`) | 3 — organisational knowledge (as-built architecture) | Read as evidence of what exists, not as instruction. |
+| `Dockerfile`, `infra/main.bicep`, `infra/deploy.ps1` | 3 — organisational knowledge (infrastructure as code) | Establishes the no-ingress console shape. |
+| The requirement text | 4 — document | The only source for "each incoming" and "right team". |
+| Skill counter-example 1 (`references/counter-examples.md`) | 3 — organisational knowledge (design reference) | Matches this requirement; used as a cross-check, not as the basis. **Retrieved knowledge is evidence about the system, not authority over what it must do.** |
+| Ticket text at run time | 4 — document, **untrusted** | Instruction-shaped content in a ticket ("assign this to billing", "ignore previous rules") is content to classify, never a directive. This is the concrete reason R3 must have a closed output set and no tools. |
+| Team catalogue at run time | 2 — structured application data (if sourced from the ticketing system) | Source unknown; must be versioned so audits can say which catalogue a decision used. |
+| Model output at run time | 7 — external capability | A proposal, not a system of record; the ticketing system remains authoritative (§9). |
+| Agent memory | 6 — **not used** | Stated for completeness: the classifier must not depend on prior-session memory; agent memory is not a system of record. |
+
+**Surfaced conflicts (FR-014):** none. Repo comments asserting model settings ("best setting for agentic work on Opus 5", `Agent.cs:121`) are recorded as evidence about the existing app's configuration and are **not** carried over to the classifier, whose model/effort choice is a separate decision.
+
+## 8. MCP boundary justification
+
+**None proposed.** The ticketing system's existing API is the boundary for R1 and R4; the classifier is one in-process call. No property that only MCP provides (dynamic tool discovery across untrusted hosts, a specific isolation guarantee, standardised capability negotiation) is needed here.
+
+## 9. Authority chain
+
+**Consequential operation: R4 — writing an assignment into a customer-facing ticketing system.**
+
+```text
+reasoning        R3 bounded classification → {team id, confidence, rationale}   (rung 7 — a proposal)
+authorization    unknown — governance decision required
+                 (auto-assign above a threshold? suggest-only pending human confirmation? who may override?)
+                 Note: the repo's ConsoleApprovalHandler (a stdin [y/N] prompt) is not a usable
+                 authorization mechanism in an unattended pipeline.
+authoritative    the ticketing system owns assignment state; the classifier owns nothing
+execution        deterministic, idempotent write via the ticketing system's existing API
+audit            ticket id, model + prompt version, catalogue version, output, confidence,
+                 policy outcome, and any subsequent human re-assignment (feeds accuracy measurement)
+```
+
+**Second consequence to name:** R3 sends ticket content — plausibly containing customer PII — to an external model API. Whether that is permitted, and under what residency/redaction rules: *unknown — governance decision required*.
+
+## 10. Generic mechanism and product delegation
+
+**Generic mechanism:** event-driven per-ticket pipeline; deterministic ingest and normalise; **one bounded, constrained-output classification call** against a closed, versioned team catalogue; deterministic confidence gate with a triage fallback; deterministic assignment write through the existing ticketing API; append-only audit.
+
+**Product mapping:** deferred. `maf-architecture-mapping` is installed but targets Microsoft Agent Framework, which this repo does not use; the repo is built directly on the Anthropic C# SDK, so the applicable platform reference for the single classification call is the `claude-api` skill — to be loaded at implementation time, after review. No SDK-level detail is asserted here from memory. The one repo-level architectural statement I will make: the classifier should be a new, separate single-call path, **not** a new tool set or system prompt bolted onto the existing `Agent` loop.
+
+## 11. Rejected alternatives
+
+- **All-deterministic** — insufficient: ticket text is unstructured and a keyword/rule table would not generalise; a deterministic pre-route for structured fields is worth keeping only as an optional short-circuit (*hypothesis*).
+- **Bounded-AI-only** — insufficient as the *sole* mechanism: only R3 needs a model, and using model calls for ingest, gating, the write, or audit would add nondeterminism where a rule suffices — but this is the closest alternative to the chosen routing, which uses exactly one bounded call and nothing more autonomous.
+- **Agent-everywhere** — not justified: no responsibility needs to decide what to examine next; it would cost latency, up to 50 model calls per ticket, non-reproducible outcomes, and — with the existing tool set — a prompt-injection surface from untrusted ticket text into `run_command`.
+- **Multi-agent** — not justified: no responsibility needs even one agent, so no security/context/deployment/ownership/model/specialisation boundary exists for a second.
+- **Workflow-only** — insufficient alone: an orchestration layer cannot produce a team label from free text; but the workflow axis is where this design lives — a fixed pipeline wrapping the one bounded call.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+
+**Decisions.** No agent. One bounded classification call with a closed output set. Everything else deterministic. Assignment is a consequential write with an authorization policy that is currently unspecified.
+
+**Evidence relied on.** Repository as-built code and IaC (rung 3); the requirement (rung 4); the skill's counter-example as a cross-check (rung 3, evidence not authority).
+
+**Trade-offs accepted.** A bounded call cannot ask a clarifying question or look up the customer's account before deciding — acceptable because the requirement asks for a label, not an investigation. If a future requirement becomes "check the customer's plan and recent incidents, *then* decide", re-run the bounded-AI challenge; that shape may fail it. Accuracy is bounded by the quality of the team catalogue descriptions. The confidence gate trades automation coverage for safety on ambiguous tickets.
+
+**Assumptions (labelled).** *Hypothesis*: the team set is closed and small enough to pass as call input. *Hypothesis*: volume does not require a distributed workflow engine. *Hypothesis*: tickets are primarily text.
+
+**Open questions — to answer before implementation.**
+1. Ticket source and trigger mechanism.
+2. Ticketing system, its API, and what "assign" means in it.
+3. Team catalogue: contents, owner, storage, versioning.
+4. Assignment policy: auto vs. suggest, confidence threshold, override rights.
+5. PII / data-residency policy for sending ticket text to the model API.
+6. Languages, latency SLA, expected volume.
+7. Whether the existing no-ingress console deployment is the intended host — its shape does not fit a service that reacts to incoming tickets.
+
+**Architecture review required before implementation.**
+
+=== SC-003-counter-example rep1 ===
+I have what I need: the skill's framework and template, plus the full existing codebase. Here is the analysis.
+
+**Context in one line:** the repo is a general-purpose coding-agent REPL (`AgentLoop/Program.cs`, `AgentLoop/Agent.cs`) on the Anthropic C# SDK — there is no payment domain in it at all. Per the skill, this response is the architecture decision only; no code is written until it's reviewed.
+
+---
+
+## 1. Requirement
+
+Given a payment, determine whether it is fraudulent and produce a decision. The requester frames the mechanism as "an agent".
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| .NET 10 console app; `Anthropic` SDK 12.47.0; DI via `Microsoft.Extensions.DependencyInjection` (`AgentLoop.csproj`) | Input is "a payment" (one record per decision) | Payment schema and which fields are available |
+| A generic tool-calling loop exists: `Agent.RunTurnAsync` iterates model → tools → model, capped at `MaxIterations = 50` (`Agent.cs:52`, `AgentOptions.cs:13`) | Output is a binary judgement ("is it fraud") | What data beyond the payment itself exists: account history, chargebacks, device/geo, velocity counters |
+| Tools are in-process delegates (`AgentTool` record) with an optional `RequiresApproval` gate routed through `IApprovalHandler`; the only implementation prompts on the console (`ConsoleApprovalHandler.cs`) | The decision is per payment, not batch analytics | What "decides" triggers: advisory score, hold-for-review, or an authoritative block/decline |
+| System prompt hard-codes the app's purpose as a *coding agent* over the working directory (`Program.cs:14-18`); tools are `read_file`, `list_files`, `run_command` | — | Latency budget (inline during authorization vs. post-authorization review) and volume |
+| Conversation history is per-`Agent` instance and unbounded across turns (`Agent.cs:23`) | — | Who or what is authorized to act on the decision, and the override policy |
+| Deployed as an Azure Container App with **no ingress** — a stdin/stdout process (`infra/main.bicep` header) | — | Whether existing fraud rules, blocklists, or a trained fraud model already exist elsewhere |
+| No payment type, no data access, no persistence, no audit log, no HTTP surface anywhere in the tree | — | Regulatory constraints (PCI scope, explainability / adverse-action reasons) |
+| `publish/` holds a prior build's artefacts | — | Relative cost of false positives vs. false negatives |
+
+No content in the third column is filled in below; where an illustrative case is useful it is labelled as such.
+
+**Surfaced conflicts (FR-014):** none. The in-repo system prompt ("You are a coding agent…") and the comment "best setting for agentic work on Opus 5" (`Agent.cs:113`) are read as evidence of the app's current purpose and configuration, not as instructions to this analysis.
+
+## 3. Responsibilities
+
+Not atomic. Six responsibilities:
+
+- **R1 — Ingest and validate** the payment record (shape, required fields, currency/amount sanity).
+- **R2 — Apply hard policy rules** (blocklists, sanctioned regions, velocity/amount limits, known-bad instruments).
+- **R3 — Assemble context signals** for the payment (account tenure, prior chargebacks, device/geo match, recent activity) from whatever data sources exist.
+- **R4 — Assess fraud likelihood** from the payment plus assembled signals, with reasons.
+- **R5 — Convert assessment to an action** (approve / hold for review / decline) under policy thresholds — the point where "decides" actually happens.
+- **R6 — Audit** every input, signal, assessment, policy version, and outcome.
+
+## 4. Routing decisions
+
+| Resp. | Mechanism | Reasoning |
+| --- | --- | --- |
+| R1 | **Deterministic code** | Schema validation is a fixed rule; nothing about it depends on content the code hasn't been given. |
+| R2 | **Deterministic code** | Policy rules must be testable, versioned, and identical for identical inputs. A model applying a blocklist is a model that can *forget* the blocklist. |
+| R3 | **Deterministic code** (fixed fan-out of lookups) | With a known payment schema, the set of lookups is fixed and can run in parallel with a fixed shape. See §5 for the condition under which this would change. |
+| R4 | **Bounded AI capability** | One call, fixed input (payment + R2 rule hits + R3 signals), fixed output (label, confidence, reason codes). This is the canonical classification shape. *Labelled assumption:* an LLM-based capability rather than a conventional trained classifier is warranted only if the evidence includes unstructured content (merchant descriptors, free-text notes, document cross-reference) or if natural-language rationale is itself a requirement — neither is established. |
+| R5 | **Deterministic code** | Thresholds and the score→action mapping are policy, not judgement. The model recommends; policy decides. |
+| R6 | **Deterministic code** | Append-only record; must not vary with model behaviour. |
+
+**Workflow axis (orthogonal):** if the decision is inline and synchronous, a plain in-process pipeline R1→R2→R3→R4→R5→R6 suffices. If R5 can produce *hold for review*, a durable workflow (hold → review → release/decline, with timeout) is needed around the pipeline — that is a saga concern and says nothing about whether any step is agentic. Which case applies is unknown.
+
+**Net routing: zero agents for the requirement as stated.**
+
+## 5. Bounded-AI challenge record
+
+Run for the two responsibilities where an agent was plausible:
+
+- **R4 (assess).** *Could a single bounded call with fixed input/output satisfy this?* **Yes.** The steps do not change based on what the model finds; only the fixed output does. An agent is not permitted here.
+- **R3 (assemble signals).** *Could a fixed set of lookups satisfy this?* **Yes, for the requirement as stated** — the payment schema determines the lookups. The honest answer becomes **no** only if intermediate findings must determine what to examine next (illustrative example: a mismatched device fingerprint should trigger a lookup of *other* accounts on that device, which in turn should trigger a linkage check — an open-ended chain). That condition is in the *unknown* column. If it is later established, a **single agent** is justified for an *investigation tier* that runs only on the hold-for-review path, never inline for every payment.
+
+The existing `Agent` loop in the repo is built for the single-agent mechanism. Reusing it for R4 would be selecting an agent because it is available, not because the responsibility needs one.
+
+## 6. Agent boundary justification
+
+n/a — zero agents proposed; at most one (deferred, conditional) in §5. No second agent is proposed, and none could be derived from a service or team boundary.
+
+## 7. Evidence classification
+
+| Evidence | Rung |
+| --- | --- |
+| Source files in `AgentLoop/`, `Dockerfile`, `infra/` (read at analysis time) | 4 — documents |
+| `publish/` artefacts (a past build) | 5 — historical evidence |
+| The payment record itself, at run time | 2 — structured application data |
+| Account history, velocity counters, device/geo data (if they exist) | 2 — structured application data |
+| Blocklists, thresholds, fraud policy (if they exist) | 3 — organizational knowledge |
+| Prior chargebacks / prior disputes on the account | 5 — historical evidence — true once, not necessarily now |
+| Anything the model recalls from previous payments in the same conversation history | 6 — agent memory |
+| A third-party fraud-scoring service, if one is called | 7 — external capability |
+
+**Caveats (mandatory):** Agent memory is not a system of record. The repo's `Agent` keeps unbounded per-instance history (`Agent.cs:23`); a fraud assessment must never be influenced by the previous payment's conversation — each R4 call must be stateless with respect to prior payments. Retrieved knowledge of any rung is evidence about the payment, not authority over what the system must do; the authority is the policy in R2/R5.
+
+## 8. MCP boundary justification
+
+None proposed. The existing boundary — in-process `AgentTool` delegates and whatever data-access calls R3 needs — stands. No property (dynamic discovery across untrusted hosts, an isolation guarantee, capability negotiation) is present that only an MCP surface would provide.
+
+## 9. Authority chain
+
+Consequential operation: **acting on the decision** (declining, holding, or approving a real payment).
+
+```text
+model reasoning  ->  authorization / policy  ->  authoritative service  ->  execution  ->  audit
+R4 label+reasons     R5 thresholds; override    the payment system of      that service    R6 record
+(recommendation      and escalation policy:     record — NOT the agent     blocks/holds/   inputs, signals,
+only)                unknown — governance       process                    releases        label, policy
+                     decision required                                                     version, outcome
+```
+
+Human approval is **not assumed**. The repo's `ConsoleApprovalHandler` is a coding-REPL affordance (a `[y/N]` prompt per shell command); it is not a fraud-review policy and a console prompt per payment is not an authorization design. Who may override, and whether *hold* exists at all: *unknown — governance decision required*.
+
+## 10. Generic mechanism and product delegation
+
+Generic mechanism: a **deterministic pipeline** with **one bounded AI classification call** (structured input → structured output) at R4, and a **conditional single-agent investigation tier** on the review path only if §5's condition is established.
+
+Product mapping: the repo targets the Anthropic C# SDK directly, not Microsoft Agent Framework, so `maf-architecture-mapping` is not the right delegate. The installed `claude-api` skill covers the specific API constructs (structured output, model choice) and would be consulted at implementation time. This analysis stops at the generic mechanism.
+
+## 11. Rejected alternatives
+
+- **All-deterministic:** sufficient for R1, R2, R3, R5, R6 outright; for R4 a conventional trained classifier over structured features (deterministic at inference) may also be sufficient — the gap that requires an LLM at all is narrow and unproven.
+- **Bounded-AI-only (no agent anywhere):** sufficient for the requirement as stated — this *is* the chosen routing for the AI portion.
+- **Agent-everywhere:** would function, at the cost of nondeterministic application of policy rules, per-payment latency of up to 50 model round-trips, and unauditable variation between identical payments — unnecessary.
+- **Multi-agent:** no responsibility carries a distinct security, context, deployment, ownership, model, or specialisation boundary; insufficient justification for even a second agent.
+- **Workflow-only:** an orchestration layer alone cannot produce the fraud judgement; it is sufficient — and needed — only for the hold→review→release saga if R5 includes a hold outcome.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+
+**Decision:** Do not add an agent. Add a deterministic decision pipeline with a single bounded classification call. Defer any agentic investigation tier until it is shown that the lookups a reviewer needs depend on what earlier lookups found.
+
+**Evidence relied on:** repo source (rung 4) establishing that no payment domain, data access, or audit exists and that the current loop is a coding agent; the requirement text for input/output shape.
+
+**Trade-offs accepted:** the bounded call cannot explore — it judges only what R3 hands it. In exchange: fixed latency, fixed cost, identical output for identical input, and an audit trail that can be replayed. If exploration turns out to be needed, it is added behind the review path, not in the inline path.
+
+**Assumptions (labelled):** (a) an LLM-based capability is the intended mechanism for R4 because the requester said "agent" — a conventional classifier may serve better and is not ruled out; (b) the payment arrives as a structured record, not free text.
+
+**Open questions — answers change the design materially:**
+1. Payment schema, and which context sources (R3) actually exist.
+2. Inline/synchronous decision or post-authorization review? This decides whether a durable workflow is needed at all.
+3. What action does "decide" authorize — advisory score, hold, or decline — and who may override (governance).
+4. Is an explainable, reason-coded output a regulatory requirement? If yes, that is the strongest argument for the LLM-based bounded call over a black-box classifier.
+5. Does a reviewer's investigation genuinely branch on findings? Only a "yes" here justifies an agent, and only on the review path.
+6. Cost asymmetry of false positives vs. false negatives — this sets the R5 thresholds and belongs to policy, not the model.
+
+Once questions 1–3 are answered I can map the routing onto this codebase (the bounded R4 call does not need the `Agent` tool loop at all; it is a single client call with a structured schema).
+
+**Architecture review required before implementation.**
+
+=== SC-003-counter-example rep1 ===
+Here is the architecture analysis. The important thing to see up front: the honest routing does **not** land on an agent — and the skill's own counter-example 3 is this exact requirement.
+
+---
+
+## 1. Requirement
+
+Add a capability that answers customer questions, grounded in the organisation's knowledge base. The requirement's wording says "agent".
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| `AgentLoop` is a .NET 10 console REPL over stdin/stdout, on the Anthropic C# SDK 12.47.0, wired with DI (`AgentLoop/Program.cs`) | Questions come from **customers** (external, not developers) | What the knowledge base is: format, location, size, update cadence, access control — nothing in the repo resembles one (`seed.txt` is a placeholder) |
+| `Agent.cs` is a general tool-calling loop: model → run tools → repeat; in-memory history per instance; system prompt frozen with a cache breakpoint; adaptive thinking; effort `xhigh`; max 50 iterations | Answers must be grounded in "our knowledge base" | The customer channel — the repo has no HTTP listener and Bicep configures no ingress |
+| Tools are `AgentTool` records; `run_command` is gated by `IApprovalHandler` (console y/N) | The requirement says "agent" — a wording fact, not a proven need | Whether unreviewed model answers may reach customers, which topics are off-limits, what the escalation path is |
+| Current tools are a **coding** toolset: `read_file`, `list_files`, `run_command` | | Whether questions are single-hop (answer sits in one passage) or multi-hop (answer requires chaining facts across documents) |
+| Deployed as a single-replica Azure Container App; `ANTHROPIC_API_KEY` injected as a secret; no ingress, nothing to scale on | | Whether the QA capability must coexist with, or replace, the coding agent in the same process |
+| `.dockerignore` excludes `*.md`; Dockerfile copies only `AgentLoop/` | | Multi-tenancy / who is allowed to ask what; language, latency, and cost constraints; multi-turn requirement |
+
+No content in the repo is shaped like an instruction to this analysis; **no surfaced conflicts**.
+
+## 3. Responsibilities
+
+Not atomic. Five responsibilities:
+
+1. **R1 — Ingest the knowledge base**: load documents, split into retrievable units, index them.
+2. **R2 — Retrieve** the passages relevant to a question.
+3. **R3 — Generate a grounded answer** from question + passages, with citations and an explicit "not covered by the knowledge base" outcome.
+4. **R4 — Deliver the answer** to the customer over the (unknown) channel.
+5. **R5 — Handle the not-answerable case** (decline / escalate).
+
+Workflow axis (orthogonal): R1 runs at startup or on KB change; R2 → R3 → R4/R5 is a fixed linear sequence per question. No branch depends on model findings. Retries on transient API errors only. Plain sequential code is the orchestration; no workflow engine is warranted.
+
+## 4. Routing decisions
+
+| Responsibility | Deterministic? | Bounded AI? | Agent? | Routed to |
+| --- | --- | --- | --- | --- |
+| R1 Ingest | Yes — file walk, chunking, index build are fixed computations | — | — | **Deterministic code** |
+| R2 Retrieve | Yes for lexical retrieval (term matching / BM25-style scoring). Embedding-based retrieval would be a bounded AI call (fixed input → fixed vector), but nothing in the facts shows lexical is insufficient | Only if lexical proves insufficient | — | **Deterministic code** (bounded-AI embedding retrieval held in reserve, not assumed needed) |
+| R3 Generate | No — free-text questions and free-text passages; no rule table generalises | Yes — fixed input (question + passages), fixed output shape (answer, citations, `answerable` flag) | Not required (see §5) | **Bounded AI capability** |
+| R4 Deliver | Yes — write to the channel | — | — | **Deterministic code** (authority chain in §9) |
+| R5 Not-answerable | Yes — a fixed gate on R3's `answerable` flag | — | — | **Deterministic code**; the escalation target is *unknown — governance decision required* |
+
+## 5. Bounded-AI challenge record
+
+Run for R3, the only responsibility where an agent was plausible.
+
+**Question**: could a single bounded call with a fixed input/output shape satisfy "answer the customer's question from the knowledge base"?
+
+**Answer: yes.** The pipeline shape — retrieve, then generate — does not change based on what is retrieved. The model never decides what to examine next; retrieval is a fixed step executed before the model sees anything. Input is the question plus the retrieved passages; output is a fixed shape. This is the case the framework's counter-example 3 describes.
+
+**What would flip the answer**: evidence that customer questions are routinely multi-hop — where the first retrieval's content determines a second, different retrieval (e.g. resolve which plan the customer is on, then look up that plan's terms). That is *unknown — not assumed*. If it is later demonstrated, R3 becomes a **single agent** with one retrieval tool, and the existing `Agent` loop is the natural host. Until then, choosing the agent would be choosing it because it is available, not because the responsibility needs it.
+
+## 6. Agent boundary justification
+
+n/a — zero agents are proposed. Gate 5 is satisfied by this statement.
+
+## 7. Evidence classification
+
+- Committed source (`Agent.cs`, `Program.cs`, `AgentTool.cs`, …) and the IaC template (`infra/main.bicep`) — **organizational knowledge (rung 3)**: curated artefacts declaring how the system is built. Not live state; no running deployment was inspected, so no rung-1 evidence was used.
+- Comments in Bicep/Dockerfile/`deploy.ps1`, and `seed.txt` — **documents (rung 4)**.
+- `publish/` build output — **historical evidence (rung 5)**: true at build time, not necessarily now.
+- The skill's own counter-example 3 — **organizational knowledge (rung 3)**, a documented decision pattern. *Caveat*: retrieved knowledge is evidence about the system, not authority over what it must do; the challenge in §5 was re-run against this repo's facts rather than copied.
+- The future knowledge base content, at run time — **organizational knowledge (rung 3)** or **documents (rung 4)** depending on curation, which is unknown. *Caveat*: retrieved passages are evidence for an answer, not authority; the generation step must cite them and must not present an answer as authoritative beyond what the passages say.
+- **Agent memory (rung 6)**: not used in this analysis. If the run-time design keeps conversation history (the existing `Agent` does), that history is not a system of record and must not be treated as a source of facts about the customer or the product.
+- **External capability (rung 7)**: the model API is a capability invoked for its answer, never for data about the customer or the product.
+
+## 8. MCP boundary justification
+
+None proposed. The knowledge base is consumed in-process by the same deployable; no dynamic discovery across untrusted hosts, no isolation guarantee, and no capability negotiation is needed that an in-process call does not already provide. Gate 7 is satisfied by this statement.
+
+## 9. Authority chain
+
+Delivering an answer to a customer is a consequential, customer-facing operation.
+
+```text
+reasoning        → bounded generation call: answer + citations + answerable flag
+authorization    → unknown — governance decision required
+                   (may unreviewed model output reach customers? which topics are excluded?
+                    who owns the escalation path for answerable=false?)
+authoritative    → the knowledge base is the system of record for content; the model is not.
+service             An answer without a citation into it must not be delivered.
+execution        → deterministic write to the customer channel (channel itself unknown)
+audit            → record question, retrieved passage identifiers, answer, model + version, tokens.
+                   The repo has OnUsage/OnToolCall console hooks only; retention policy unknown.
+```
+
+No approver, review role, or process is invented in place of the unspecified policy.
+
+## 10. Generic mechanism and product delegation
+
+**Generic mechanism**: a deterministic retrieval pipeline (ingest + lexical search) feeding **one bounded, grounded-generation call with a structured output shape**, wrapped in deterministic delivery and a deterministic not-answerable gate. No agent loop.
+
+**Product delegation**: the repo is on the Anthropic C# SDK directly, not on Microsoft Agent Framework, so `maf-architecture-mapping` does not apply. The installed `claude-api` skill is the matching platform reference; SDK-level detail (structured output, caching the KB prefix, model choice) is deferred to it at implementation time and not asserted here from memory.
+
+## 11. Rejected alternatives
+
+- **All-deterministic**: insufficient — free-text customer questions cannot be answered by a rule table or exact-match FAQ lookup; only R1, R2, R4, R5 are deterministic.
+- **Bounded-AI-only**: **sufficient — this is the chosen routing**; every responsibility is either deterministic or one fixed-shape model call.
+- **Agent-everywhere**: would work — registering a `search_knowledge_base` tool on the existing `Agent` loop answers questions — but at unnecessary cost: an unbounded number of model calls per question (up to 50), higher latency and spend, a less auditable path from question to answer, and no responsibility that needs run-time control.
+- **Multi-agent**: insufficient justification — no security, context, deployment, ownership, model, or specialisation boundary is named by the requirement or visible in the repo.
+- **Workflow-only**: insufficient alone — generation needs a model; and the linear sequence is simple enough that plain code, not a workflow engine, is the right orchestration.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+
+- **Decision**: deterministic retrieval + one bounded grounded-generation call + deterministic delivery and escalation gate. **Not an agent**, despite the requirement's wording. The existing `Agent` loop is left untouched; the new capability is a separate, simpler component in the same project.
+- **Evidence**: rung 3 for source/IaC and the KB; rung 4 for comments and placeholders; rung 5 for build output; rung 6 not used; rung 7 for the model API.
+- **Trade-offs**: fixed cost and latency per question, a fully auditable question→passages→answer path, and testable in isolation — at the price of not handling multi-hop questions until that need is demonstrated (at which point §5 records exactly how it becomes an agent).
+- **Assumptions (labelled)**: *hypothesis* — the knowledge base is a set of text/markdown documents small enough that lexical retrieval over local files is adequate. *Hypothesis* — the customer channel, for now, is the existing console REPL, since the deployment has no ingress.
+- **Open questions** — the ones that change the implementation materially:
+  1. **What is the knowledge base?** Local files in the repo (my default if you say nothing else: a `knowledge-base/` folder of `.md` files), or an external store?
+  2. **Channel**: keep it as a REPL mode alongside the coding agent, or is a different surface intended?
+  3. **Governance**: may model answers reach customers unreviewed, and where do `answerable=false` questions go? — *unknown — governance decision required*.
+  4. **Confirm the routing**: bounded RAG call (recommended), or do you know the questions are multi-hop and want the agent-with-search-tool shape instead?
+
+**Architecture review required before implementation.**
+
+=== SC-003-counter-example rep2 ===
+Step 1–9 of the router, run against the repository as it actually is. The skill's own counter-example set contains this exact requirement, and the repository confirms the routing.
+
+# Architecture analysis — support-ticket team assignment
+
+## 1. Requirement
+
+Every incoming support ticket must be read and assigned to the correct team. The request names the mechanism ("agent"); this analysis treats that as the requirement's wording, not as a routing decision.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| .NET 10 console app, `Anthropic` SDK 12.47.0, MS DI + Options (`AgentLoop/AgentLoop.csproj`) | Tickets arrive one at a time ("each incoming") | Where tickets come from: queue, webhook, mailbox, ticketing-system API, polling |
+| `Agent.cs` is a tool-calling loop: up to 50 model calls per turn, adaptive thinking, effort `xhigh`, conversation history kept on the instance for its lifetime | Each ticket must be read (content is the input) | Ticket schema — subject/body/attachments/metadata/language |
+| Three tools registered: `read_file`, `list_files`, `run_command` (shell, gated by `IApprovalHandler`) (`Program.cs`) | Each ticket must be assigned to exactly one team | The set of teams, how they are defined, and whether the set changes over time |
+| `ConsoleApprovalHandler` is a `[y/N]` prompt on stdin | The output is a team, not a reply to the customer | What "assign" mutates — which system of record holds the assignment |
+| `AgentToolExecutor` converts tool exceptions into `is_error` tool results | | Whether an assignment may be applied automatically, needs a confidence threshold, or needs human confirmation |
+| Hosted as a single-replica Container App, **no ingress**, stdin/stdout only (`infra/main.bicep`) | | Volume, latency, and SLA |
+| `ANTHROPIC_API_KEY` injected as a Container Apps secret | | Whether historical ticket→team labels exist (for evaluation or examples) |
+| `Program.cs` already catches rate-limit / 5xx / IO / API exceptions per turn | | Whether the existing REPL process is the intended host, or a new process/service is |
+| No ticket source, team catalogue, ticketing client, or queue exists anywhere in the repo | | Idempotency and retry semantics on the ticket source |
+
+Surfaced conflicts (FR-014): none. The only instruction-shaped text in the repo is the system prompt in `Program.cs` ("You are a coding agent…"), which is addressed to the model in the system under design, not to this analysis.
+
+## 3. Responsibilities
+
+Not atomic. Five responsibilities:
+
+1. **Ingest** — receive/poll each ticket and deserialise it into a fixed shape.
+2. **Classify** — map ticket content to one team from the catalogue.
+3. **Gate** — decide whether the classification is trustworthy enough to act on (threshold / fallback team / escalate).
+4. **Assign** — write the assignment to the system of record.
+5. **Audit** — record ticket id, chosen team, confidence, rationale, model and prompt version, timestamp.
+
+Workflow axis (orthogonal): the five steps run in a fixed sequence per ticket, with retry on transient model/API errors and idempotency keyed on ticket id.
+
+## 4. Routing decisions
+
+| # | Responsibility | Routed to | Reasoning (routing order) |
+| --- | --- | --- | --- |
+| 1 | Ingest | **Deterministic code** | Fixed transport, fixed deserialisation; nothing to decide. |
+| 2 | Classify | **Bounded AI capability** | Deterministic rules rejected: ticket text is unstructured free text; a keyword table will not generalise. Bounded AI is sufficient — see §5. Single agent rejected: no run-time decision about what to examine next. |
+| 3 | Gate | **Deterministic code** | A threshold comparison against the classification's confidence plus a fallback rule. The policy itself is unknown (§9), but its mechanism is a fixed rule. |
+| 4 | Assign | **Deterministic code** | One call to the ticketing system's existing API. Consequential — carries the authority chain in §9. |
+| 5 | Audit | **Deterministic code** | Structured write of fixed fields. |
+
+Zero agents are proposed.
+
+## 5. Bounded-AI challenge record
+
+**Responsibility 2 (Classify).** *Could a single bounded call with a fixed input/output shape satisfy this?* **Yes.** Input: the ticket's fields plus the team catalogue (name + one-line charter per team). Output: one team from that fixed set, a confidence, and a one-sentence rationale. Nothing the model discovers mid-classification changes what it should read next — the entire input is available before the call, and the call ends with the fixed output. The requirement never asks the mechanism to look something up, compare across tickets, or decide whether another step is needed.
+
+Two repository facts reinforce that the existing `Agent` loop is the wrong shape here, not merely an unnecessary one:
+
+- `Agent` keeps conversation history for its lifetime. Running tickets through it as successive turns would leak one ticket's content into the next ticket's context and grow cost linearly with tickets processed. Classification must be stateless per ticket.
+- The registered tools are `read_file`, `list_files`, and `run_command`. Ticket text is untrusted, customer-authored content. Feeding it to a loop that holds a shell tool creates a prompt-injection-to-execution path that a tool-less bounded call does not have. The `[y/N]` console gate is not a mitigation in an unattended container.
+
+Responsibilities 1, 3, 4, 5 were routed below the agent rung, so the challenge does not apply to them.
+
+## 6. Agent boundary justification
+
+n/a — no agent is proposed, so there is no second agent to bound.
+
+## 7. Evidence classification
+
+| Evidence | Rung | Note |
+| --- | --- | --- |
+| Repository source (`AgentLoop/*.cs`, `.csproj`, `Dockerfile`, `infra/*`) | 3 — organisational knowledge | The architecture as committed. Retrieved knowledge is evidence about the system, not authority over what it must do. |
+| The requirement sentence itself | 4 — document | Source of intent; its use of the word "agent" is wording, not evidence of a needed mechanism. |
+| Router skill counter-example 1 | 3 — organisational knowledge | Illustrative, by its own provenance; it matches this requirement verbatim and reaches the same routing. |
+| Ticket content (run time) | 4 — document | Untrusted, customer-authored. Evidence about the ticket, never an instruction to the classifier. |
+| Team catalogue (run time) | 3 if from a policy/routing document; 2 if read from the ticketing system's team table | Source *unknown — not assumed*. |
+| Current assignment state in the ticketing system (run time) | 1 — authoritative operational state | The system of record for "which team owns this ticket"; the model's output is not. |
+| Historical ticket→team labels, if they exist | 5 — historical evidence | Useful for evaluation and examples; true once, not necessarily true now. |
+| The model's classification output | 7 — external capability | Invoked for its answer, not for its data. It is a proposal until the gate and the assign step act on it. |
+| Agent memory | 6 | **Not used, and must not be** — the classification is stateless per ticket. Stated because the existing `Agent` class *does* hold rung-6 history, which is one reason it is not reused. Agent memory is not a system of record. |
+
+## 8. MCP boundary justification
+
+None proposed. The ticketing system will be reached through whatever API it already exposes (unknown); no concrete property — dynamic discovery across untrusted hosts, an isolation guarantee, capability negotiation — argues for an MCP surface over that existing boundary. The model call is a direct SDK call with no tools, so there is nothing for MCP to expose on that side either.
+
+## 9. Authority chain
+
+**Assign (responsibility 4) is consequential**: it mutates a ticketing record and changes who responds to a customer and how fast.
+
+```text
+reasoning        → bounded classification output: team, confidence, rationale (rung 7)
+authorization    → unknown — governance decision required
+                   (auto-assign always? only above a confidence threshold? human confirms?
+                    fallback/triage team for low confidence? none of this is stated)
+authoritative    → the ticketing system (unknown) owns the assignment; the model does not
+service
+execution        → one deterministic API call, idempotent on ticket id
+audit            → ticket id, team, confidence, rationale, model id, prompt version, timestamp
+                   — destination unknown — not assumed
+```
+
+The repository's `IApprovalHandler` shows a gating *pattern* exists; it is not evidence of a *policy*, and a stdin `[y/N]` prompt cannot serve an unattended Container App. No approver is invented.
+
+Responsibilities 1, 2, 3, 5 have no external consequence on their own.
+
+## 10. Generic mechanism and product delegation
+
+**Generic mechanism**: a deterministic per-ticket pipeline — ingest → one stateless, tool-less, fixed-shape classification call (input: ticket fields + team catalogue; output: team ∈ catalogue, confidence, rationale) → threshold gate → assignment via the ticketing system's existing API → audit record. Transient model errors retried; the pipeline is idempotent by ticket id.
+
+**Product delegation**: `maf-architecture-mapping` is installed but targets Microsoft Agent Framework, which this project does not use — it calls the Anthropic C# SDK directly. The installed platform skill for that SDK is `claude-api`; SDK-level detail (structured-output configuration, model choice for a classification workload, effort/thinking settings, retry behaviour) is delegated to it at implementation time and is not asserted here from memory.
+
+## 11. Rejected alternatives
+
+- **All-deterministic** — insufficient: free-text ticket classification does not reduce to a rule table; sufficient for the other four responsibilities, which is why they are deterministic.
+- **Bounded-AI-only** — sufficient, and it is the chosen shape: one fixed-shape call for classification, deterministic code everywhere else, no agent anywhere.
+- **Agent-everywhere** — insufficient justification: no responsibility decides what to examine next; the cost is real (Opus 5 at `xhigh` effort, up to 50 calls per turn, accumulated history, non-deterministic latency) and the shell tool turns untrusted ticket text into an execution risk.
+- **Multi-agent** — insufficient justification: zero agents are proposed, so there is no boundary to name.
+- **Workflow-only** — insufficient alone: the sequence still needs the classification output; the workflow axis is used to order the steps and handle retries, not to replace the model call.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+
+- **Decision**: no new agent. A bounded classification call inside a deterministic pipeline, built as a separate stateless component rather than as a turn on the existing `Agent` singleton.
+- **Evidence**: repository source (rung 3); ticket content (rung 4, untrusted); ticketing system state (rung 1); model output (rung 7). Agent memory (rung 6) not used.
+- **Trade-offs**: cheaper, faster, and testable offline against historical labels (rung 5); prompt-injection surface limited to a wrong label rather than a shell command. Less adaptive if routing later requires investigation (e.g. checking a customer's contract tier or related open tickets) — if that requirement appears, re-run the bounded-AI challenge; do not pre-build for it.
+- **Assumptions** (labelled): the team set is finite and enumerable at call time (*hypothesis*); subject + body carry enough signal for most tickets (*hypothesis*); a triage/fallback destination exists for low-confidence cases (*hypothesis* — its existence is a §9 governance question).
+- **Open questions**: ticket source and schema; team catalogue and its owner; system of record for assignment; authorization policy for auto-assignment — *unknown — governance decision required*; audit destination; whether the current no-ingress, stdin-driven Container App is the host, since it cannot receive "incoming" anything today.
+
+**Architecture review required before implementation.**
+
+---
+
+I've stopped here because the router skill mandates it. If you confirm the routing, I'll implement the classification as a stateless bounded call (new `TicketClassifier` component + a small ingest/gate/assign/audit pipeline with stubbed ticket source and ticketing client, since neither exists in the repo), loading `claude-api` for the SDK specifics. The one thing I can't stub sensibly is the authorization policy — tell me whether assignment is auto-applied, threshold-gated, or human-confirmed.
+
+=== SC-003-counter-example rep2 ===
+**Step 1–9 of the agentic-architecture router, run against your request.** Short version up front: your own skill's reference material contains this exact requirement as a counter-example — it does not need an agent. Full analysis follows.
+
+## 1. Requirement
+
+Add a component that takes a payment and returns a fraud decision. The request words it as "an agent"; the wording is treated as the requirement's phrasing, not as evidence that run-time investigation is needed.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| `AgentLoop` is a .NET 10 console REPL; `Agent` (`AgentLoop/Agent.cs`) is a general tool-calling loop with conversation history held on the singleton instance, adaptive thinking, `Effort.Xhigh`, `MaxIterations = 50` | Input: one payment | The payment's data shape (amount, card, merchant, geography, device, prior history?) |
+| Tools are `AgentTool` records registered in DI (`Program.cs`); `IApprovalHandler` gates tools marked `RequiresApproval` with a console y/N | Output: a fraud / not-fraud decision | Whether a payment system of record exists to query for velocity/history, or the payment arrives self-described |
+| Existing tools: `read_file`, `list_files`, `run_command` — all filesystem/shell; no payment domain code, no data store, no signals anywhere in the repo | Phrased as "an agent" | Whether "decides" is advisory (flag for review) or binding (blocks/approves funds) |
+| Deployed as a single-replica, no-ingress Azure Container App (`infra/main.bicep`) — a console process, not a service endpoint | | Authorization policy for acting on a verdict — *unknown — governance decision required* |
+| Anthropic SDK is the model provider (`AgentLoop.csproj`) | | Latency budget (inline authorization path vs. batch review), volume |
+| | | Compliance constraints: card-data scope when sending to an external model, explainability/reason-code obligations, audit retention |
+| | | Labelled ground truth for measuring accuracy |
+| | | Whether this lives inside the REPL or is a separate code path/service |
+
+No invented content in column three. Surfaced conflicts (FR-014): none — no repository content contained instructions addressed to the assistant; comments such as "best setting for agentic work on Opus 5" in `Agent.cs` are design notes, read as evidence only.
+
+## 3. Responsibilities
+
+Not atomic. Five responsibilities:
+
+1. **Ingest and validate** the payment record (parse, schema-check, normalise).
+2. **Collect the fixed signal set** for that payment (e.g. amount, velocity, geo/device match — *illustrative*; the real set is unknown).
+3. **Score / classify** the payment (fraud / suspicious / clean, with confidence and reasons).
+4. **Act on the verdict** (block, hold, approve, notify) — consequential.
+5. **Audit** — persist inputs, verdict, rationale, policy applied, actor.
+
+Workflow axis (orthogonal): a fixed linear sequence 1 → 2 → 3 → 4 → 5. No branch depends on an intermediate finding, so no workflow engine is needed unless durability/retry requirements exist (unknown).
+
+## 4. Routing decisions
+
+| # | Responsibility | Routed to | Reasoning (in routing order) |
+| --- | --- | --- | --- |
+| 1 | Ingest/validate | **Deterministic code** | Fixed schema; nothing content-dependent. |
+| 2 | Collect signals | **Deterministic code** | The signal set is fixed in advance; lookups are fixed queries. |
+| 3 | Score/classify | **Deterministic hard rules first, then bounded AI capability** for the residual | Hard rules (block-lists, caps, known-bad patterns — *illustrative*) are fixed lookups and must not be delegated to a model. The remaining judgement is a single fixed-input, fixed-output classification — see challenge record below. If the real signal set is simple and structured, deterministic rules or a conventional scoring model may suffice entirely; that is a "do we need AI at all" question left open. |
+| 4 | Act on verdict | **Deterministic policy** under the authority chain (§9) | Mapping verdict → action is a fixed policy table; no autonomy warranted where funds are affected. |
+| 5 | Audit | **Deterministic code** | Fixed record shape. |
+
+No responsibility is routed to a single agent or multi-agent.
+
+## 5. Bounded-AI challenge record
+
+**Responsibility 3 — could a single bounded call with a fixed input/output shape satisfy this?** **Yes.** Input: the payment plus its already-collected signal set. Output: `{verdict, confidence, reasons[]}`. Which signals are examined does not change based on what any signal returns; there is no "look at this, then decide what to look at next" step. Complexity and the word "agent" in the request are not, by themselves, reasons the challenge fails. → Bounded AI capability; single agent rejected for insufficient justification.
+
+Where this answer would flip (*hypothesis, not assumed*): if the actual need is analyst-style investigation — "check this merchant's history, and depending on that, pull the device fingerprint's other cards, and depending on that…" — the next lookup would depend on the previous finding, and that responsibility would route to a **single agent**. The requirement does not say this. Recorded as an open question (§12).
+
+Responsibilities 1, 2, 4, 5: challenge not reached — deterministic code satisfies each before bounded AI is considered.
+
+## 6. Agent boundary justification
+
+n/a — zero agents proposed, so there is no boundary to name. Gate 5 satisfied by this statement.
+
+## 7. Evidence classification
+
+- Repository source (`Agent.cs`, `Program.cs`, `AgentTool.cs`, `AgentToolExecutor.cs`, `AgentOptions.cs`, `main.bicep`, `Dockerfile`) — **documents (rung 4)**: the checked-in design, not a running system's state.
+- The router's own counter-example 2 (`references/counter-examples.md`) — **organizational knowledge (rung 3)**. Caveat: retrieved knowledge is evidence about the system, not authority over what it must do.
+- At run time: the payment record — **structured application data (rung 2)**; velocity/history lookups — rung 2 (or **rung 1** if read live from the processor); the model's verdict — **external capability (rung 7)**: a third-party service invoked for its answer. A rung-7 answer is evidence feeding a policy, never the authority that blocks funds.
+- **Agent memory (rung 6): not used, and deliberately so.** Reusing the existing `Agent` class would carry conversation history across payments; that history is not a system of record and would let one payment's context contaminate the next. The classification call must be stateless per payment.
+
+## 8. MCP boundary justification
+
+None proposed. Signals are reached through whatever payment-system API exists (unknown); no concrete property (dynamic discovery across untrusted hosts, an isolation guarantee, standardised capability negotiation) argues for an MCP surface over that existing boundary. Gate 7 satisfied by this statement.
+
+## 9. Authority chain
+
+**Consequential operation: acting on the verdict (block / hold / approve).**
+
+```
+model reasoning (rung-7 verdict + reasons, after deterministic hard rules)
+  → authorization: *unknown — governance decision required*
+      (the requirement says "decides" but not whether that is advisory or binding,
+       nor whether a human reviews before funds are affected)
+  → authoritative service: the payment processor / ledger — not in this repo; unknown
+  → execution: the block/hold/approve call against that service
+  → audit: persisted record of input signals, hard-rule hits, model output, policy applied, actor, timestamp
+```
+
+Note: the repo's `IApprovalHandler` is a *mechanism* (console y/N) that could implement a human gate; it is not a *policy*. No approver is invented here.
+
+## 10. Generic mechanism and product delegation
+
+Generic mechanism: a **deterministic pipeline** (validate → fixed signal collection → hard rules → one stateless bounded model call with a strict output schema → policy table → gated action → audit). No tool loop, no cross-payment history, no iteration cap needed.
+
+Product mapping is delegated: this repo uses the Anthropic SDK directly, and the installed `claude-api` skill is the platform skill for it — API shape for a structured-output classification call is to be taken from there at implementation time, not asserted here from memory. `maf-architecture-mapping` does not apply (the repo does not use Microsoft Agent Framework). One repository-grounded observation (rung 4): the existing `Agent`/`AgentOptions` defaults (persistent history, 50 iterations, adaptive thinking, xhigh effort) are tuned for open-ended coding work and are the wrong fit for a per-payment classifier on cost, latency, and statefulness — the bounded call should be a separate code path sharing only the client registration.
+
+## 11. Rejected alternatives
+
+- **All-deterministic** — sufficient if the signal set and thresholds are simple and fully structured (unknown); insufficient only where judgement over unstructured fields is genuinely required. Kept as the first layer, and possibly the whole answer.
+- **Bounded-AI-only** — sufficient for the scoring responsibility; insufficient as the whole shape because hard rules and the act-on-verdict policy must not be delegated to a model.
+- **Agent-everywhere** — insufficient justification: no responsibility decides what to examine next; it would add cost, latency, non-determinism, and a cross-payment history hazard for no benefit.
+- **Multi-agent** — insufficient justification: zero agents proposed, no boundary exists.
+- **Workflow-only** — insufficient alone: sequencing does not produce a verdict; and the sequence is linear, so an engine is unwarranted unless durability/retry is required (unknown).
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+
+- **Decision**: not an agent. A deterministic pipeline with one stateless bounded classification call, hard rules before the model, a policy table after it, and an explicit authority chain around any action on funds.
+- **Evidence**: repository source (rung 4); router counter-example (rung 3, guidance not authority); run-time payment data (rung 2/1); model verdict (rung 7, evidence not authority).
+- **Trade-off accepted**: cheaper, faster, testable against labelled data (fixed I/O is evaluable), auditable; less adaptive — if open-ended investigation is later required, revisit §5.
+- **Assumptions (labelled)**: the signal set is fixed in advance (*hypothesis* — the requirement implies but does not state it); the payment record is structured (*hypothesis*).
+- **Open questions**:
+  1. Advisory or binding? Human review before block? — *unknown — governance decision required*.
+  2. What signals exist, and from which system of record?
+  3. Is any investigation step actually open-ended (would flip §5 to a single agent)?
+  4. Card-data scope and reason-code/explainability obligations for sending to an external model.
+  5. Where does this run — inside the console REPL, or as a separate service (the current Container App has no ingress)?
+  6. Is there labelled data to measure precision/recall before this affects any real payment?
+
+If you confirm the shape above (or answer 1–3 and 5), the next step is implementation via the `claude-api` skill: a `FraudClassifier` code path with a strict output schema, hard rules ahead of it, and a policy/approval step behind it — reusing the `IAnthropicClient` registration but not the `Agent` loop.
+
+**Architecture review required before implementation.**
+
+=== SC-003-counter-example rep2 ===
+Counter-example 3 in the skill's own references is this exact requirement, so the analysis below runs the procedure against *this repository's* facts rather than restating it. I'm in **step 9** of the nine-step procedure (steps 1–8 are presented in the open below).
+
+# Architecture Analysis — "Add an agent that answers customer questions using our knowledge base"
+
+## 1. Requirement
+
+Customers submit questions; the system must answer them using the organisation's knowledge base. The requirement names the mechanism ("agent") in its own wording — that wording is treated as a hypothesis to test, not a decision.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| `AgentLoop/` is a .NET 10 console REPL calling the Anthropic Messages API through the `Anthropic` NuGet package 12.47.0 (`AgentLoop.csproj`) | Questions come from **customers** (external, not developers) | **What the knowledge base is** — files, a wiki, a search index, a vector store — its format, size, location, access path, update cadence |
+| `Agent.cs` is a generic *single-agent* tool-calling loop: model → execute tool_use → feed results → repeat, up to `MaxIterations = 50`, history kept per instance | Answers must be **grounded in the knowledge base**, not general model knowledge | **Channel** by which customers ask — the app has no HTTP ingress (`infra/main.bicep`: "No ingress: AgentLoop does not listen on a port"); only stdin/stdout exists |
+| Three client-side tools are registered in `Program.cs`: `read_file`, `list_files`, `run_command` (the last gated by `ConsoleApprovalHandler`, a `[y/N]` prompt) | — | Whether a human reviews answers before customers see them |
+| System prompt in `Program.cs` says "You are a coding agent working in {workingDirectory}" — the existing loop is for coding, not support | — | What happens when the KB does not cover a question (escalation policy) |
+| `AgentOptions`: model `claude-opus-5`, adaptive thinking, effort `xhigh`, prompt caching on the system block, server-side refusal fallback | — | Whether questions need **multi-hop** lookup (answer of lookup 1 determines lookup 2) or clarification turns |
+| No knowledge-base content, no retrieval/search code, no index, no tests exist in the repo; `seed.txt` contains only the literal text "seed content" | — | Whether all KB content is customer-visible (data sensitivity / access control) |
+| Deployment: Docker → Azure Container App, `minReplicas: 1, maxReplicas: 1`, `ANTHROPIC_API_KEY` injected as a secret | — | Volume, latency budget, languages, whether conversations are single-turn or multi-turn |
+
+No entry in the third column is filled with invented content.
+
+## 3. Responsibilities
+
+The requirement is not atomic. Six responsibilities:
+
+| # | Responsibility |
+| --- | --- |
+| R1 | Accept a customer question from the channel |
+| R2 | Retrieve the KB passages relevant to that question |
+| R3 | Compose an answer grounded in those passages with citations — or state that the KB does not cover the question |
+| R4 | Gate: decide whether to return the answer or escalate, from R3's structured output |
+| R5 | Deliver the answer (or escalation) to the customer |
+| R6 | Audit: record question, retrieved sources, answer, token usage |
+
+## 4. Routing decisions (Axis 1 — autonomy)
+
+| # | Mechanism | Reasoning, in routing-order preference |
+| --- | --- | --- |
+| R1 | **Deterministic code** | Channel I/O; nothing to decide. |
+| R2 | **Deterministic code** | Top-k retrieval (lexical or against a pre-built index) for the question is a fixed lookup. *If* a vector index is chosen, the embedding computation is a bounded AI capability with fixed shape (text in, vector out) — but the decision of *what* to retrieve is still fixed: top-k for the question, every time. |
+| R3 | **Bounded AI capability** | Deterministic code is insufficient (free-text questions, composed answers). A single fixed-shape call satisfies it — see §5. Single agent rejected: insufficient justification. |
+| R4 | **Deterministic code** | A flag/threshold over R3's structured output ("covered by KB: yes/no", citations present). |
+| R5 | **Deterministic code** | Sending is mechanical; it is consequential — see §9. |
+| R6 | **Deterministic code** | Logging. |
+
+**Axis 2 — workflow (orthogonal):** R1→R2→R3→R4→R5→R6 is a short, fixed sequence. An in-process sequential function suffices; no workflow engine, saga, or parallelism is needed. Retry applies only to the R3 model call on transient 429/5xx, which the SDK's default retries and the existing most-specific-first exception chain in `Program.cs` already cover.
+
+**Availability-bias note:** the repository already contains a working single-agent loop (`Agent.cs`). The framework exists precisely to stop an agent being chosen because it is available rather than because the responsibility needs one. Reusing that loop for R3 would also expose `run_command`/`read_file`/`list_files` to customer-originated text — a security hazard independent of the routing question.
+
+## 5. Bounded-AI challenge record
+
+**R3 — could a single bounded call with a fixed input/output shape satisfy this responsibility?**
+
+**Yes.** Input: the question plus the top-k retrieved passages (fixed shape). Output: an answer with citations plus a "covered / not covered" indicator (fixed shape). The steps taken — retrieve, then generate — do not change based on what is retrieved; no intermediate finding determines what to examine next. Complexity and natural language are present but are not, by themselves, reasons the challenge fails.
+
+**Flip condition (recorded, not assumed):** if the unknown "multi-hop" turns out to be a real requirement — e.g. the first retrieval reveals *which* product/plan the customer is on, and only then can the right policy be looked up — the honest answer for that sub-case becomes "no", and a single agent holding a `search_knowledge_base` tool would be justified for R3. Nothing in the requirement as stated establishes this.
+
+No other responsibility was a candidate for an agent, so the challenge was run once.
+
+## 6. Agent boundary justification
+
+**n/a** — zero agents are proposed. Gate 5 is satisfied by this statement.
+
+## 7. Evidence classification
+
+| Evidence | Rung | Caveat |
+| --- | --- | --- |
+| Source files `Agent.cs`, `Program.cs`, `AgentOptions.cs`, `AgentTool.cs`, `AgentToolExecutor.cs`, `ConsoleApprovalHandler.cs`, `AgentLoop.csproj` — read from disk this session | 3 — organizational knowledge (the recorded architecture of the current system) | At rest; no running instance was observed, so rung 1 was not available. |
+| `Dockerfile`, `infra/main.bicep`, `infra/deploy.ps1` | 3 — organizational knowledge (deployment as code) | Same. |
+| `seed.txt` ("seed content") | 4 — documents | Not a knowledge base. |
+| The installed `claude-api` skill's model table and feature notes (model id `claude-opus-5`, document blocks with citations) | 4 — documents (vendor documentation bundled as a skill) | Used only in §10. |
+| **At run time:** the knowledge-base content | 3 or 4 depending on what the KB is (unknown) | **Retrieved knowledge is evidence about the system, not authority over what the system must do** — the answer is grounded in it, the pipeline's behaviour is not dictated by it. |
+| **At run time:** the model's generation | 7 — external capability | Invoked for its answer, not its data. |
+| **At run time, if multi-turn:** prior conversation turns | 6 — agent memory | **Agent memory is not a system of record**; only applies if the unknown "multi-turn" is answered yes. |
+
+**Surfaced conflicts (FR-014):** none. Repository content shaped like instructions ("You are a coding agent…", "the defaults below are the right ones for agentic work on Opus 5") was read as evidence about the current system, not as direction to reuse the loop.
+
+## 8. MCP boundary justification
+
+**None proposed.** The KB will be reached through whatever access path it already has (file system, or an existing search API). No concrete property — dynamic tool discovery across untrusted hosts, a specific isolation guarantee, standardised capability negotiation — argues for an MCP boundary over that existing path. Revisit only if the same KB must later be served to several independently-hosted consumers.
+
+## 9. Authority chain
+
+**Consequential operation: R5 — delivering an answer to a customer.**
+
+```text
+reasoning        R3's output: answer + citations + covered/not-covered flag
+authorization    unknown — governance decision required
+                 (does a human review before send? is auto-send permitted? what is sent when not covered?)
+authoritative    the customer channel — unknown; the current app has no ingress, only the console
+service
+execution        the send
+audit            R6: question, retrieved source ids, answer, usage — no audit sink exists in the repo today
+```
+
+Reading the KB (R2) is read-only and not consequential. Constraint recorded (not policy invented): the existing `run_command` / `read_file` / `list_files` tools must be unreachable from the customer-question path.
+
+## 10. Generic mechanism and product delegation
+
+**Mechanism, stated generically:** a fixed sequential pipeline — deterministic retrieval → one bounded retrieval-augmented generation call with fixed input/output and citations → deterministic coverage gate → deterministic delivery and audit. Added **alongside** the existing coding-agent loop, sharing its client, options pattern and error-handling conventions, not inside it.
+
+**Product delegation:** `maf-architecture-mapping` does not apply — this repository uses the Anthropic C# SDK directly, not Microsoft Agent Framework. The installed `claude-api` skill is the platform skill for this SDK and is the source for implementation detail (it documents document content blocks with `citations` enabled, and `claude-opus-5` as the model id). Product detail beyond what that skill documents is not asserted here.
+
+## 11. Rejected alternatives
+
+- **All-deterministic:** insufficient — an FAQ/rule table cannot compose answers to freely phrased questions; it would cover exact matches only.
+- **Bounded-AI-only:** **sufficient — this is the chosen routing.** Retrieval is deterministic, generation is one fixed-shape call.
+- **Agent-everywhere:** insufficient justification — the pipeline shape does not change per question; an agent adds several model calls per question, unbounded latency on a customer-facing path, a tool loop whose current tool surface includes shell execution, and buys only iterative re-querying, which the stated requirement does not need.
+- **Multi-agent:** insufficient justification — no distinct security, context, deployment, ownership, model or specialisation boundary exists between any two proposed agents, because zero agents are proposed.
+- **Workflow-only:** insufficient alone — an orchestration layer sequences steps but cannot produce the answer; and the sequence is short and fixed, so no workflow engine is warranted either.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+
+- **Decision:** not an agent. A bounded RAG call in a fixed pipeline, as a new component next to the existing `Agent` loop, with the coding tools kept out of the customer path.
+- **Evidence:** repository source and infra (rung 3) for what exists; KB content at run time (rung 3/4, evidence-not-authority caveat applies); model as external capability (rung 7).
+- **Trade-off:** one model call per question — cheaper, bounded latency, no runaway loop, straightforward to eval against a question/answer set — versus no iterative re-query; questions needing a second, result-dependent lookup will surface as "not covered" until the flip condition in §5 is exercised.
+- **Assumptions (labelled):** *hypothesis* — the KB is a static corpus small enough to retrieve top-k passages from; *hypothesis* — questions are single-turn.
+- **Open questions:**
+  1. What and where is the knowledge base? (Largest unknown; determines R2 entirely.)
+  2. Which channel do customers use? (The app currently has no ingress.)
+  3. Human review before send — *unknown — governance decision required*.
+  4. Escalation when the KB does not cover the question.
+  5. Is multi-hop retrieval required? (The one answer that would change R3's routing to a single agent.)
+  6. Is every KB document customer-visible?
+- **Next step:** answer (1) at minimum — or say "proceed" and I will implement under the labelled assumptions: a `knowledge-base/` folder of Markdown/text files, a `KnowledgeBaseAnswerer` doing lexical retrieval → one grounded, cited `Messages.Create` call → coverage gate, wired as a separate console mode with the coding tools excluded.
+
+**Architecture review required before implementation.**
+
+=== SC-003-counter-example rep3 ===
+This request is, almost verbatim, the skill's own counter-example 1 — and reading the code confirms why that matters: the existing `Agent` class is an open-ended tool loop (history across turns, adaptive thinking, xhigh effort, approval-gated shell), which is the wrong mechanism for a per-ticket classification. Here's the analysis the skill requires; it ends at the decision, and I'll implement on your go-ahead.
+
+## 1. Requirement
+
+For every incoming support ticket, read its content and assign it to the correct team. The request calls this "an agent"; that wording is treated as a description of the outcome, not a constraint on the mechanism.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| .NET 10 console app `AgentLoop`, Anthropic C# SDK 12.47.0, `Microsoft.Extensions.DependencyInjection` (`AgentLoop/AgentLoop.csproj`) | One ticket in → one team out | The set of teams: how many, whether fixed, where it is defined |
+| `IAnthropicClient` registered as a singleton; API key from `ANTHROPIC_API_KEY` (`AgentLoop/Program.cs:11`) | Triggered per incoming ticket ("each incoming") | Where tickets arrive from (ticketing system, queue, webhook, email, file) and their shape/fields |
+| `Agent` is a generic tool loop: conversation history on the instance, adaptive thinking, effort xhigh, `MaxIterations` 50, default model `claude-opus-5` (`AgentLoop/Agent.cs`, `AgentLoop/AgentOptions.cs`) | The ticket's *content* is the input to the decision | What "assign" means concretely — write-back to a system of record, emit an event, or just a label |
+| Registered tools are `read_file`, `list_files`, and `run_command` (approval-gated via `IApprovalHandler`) — all local-filesystem/shell | — | Whether assignment takes effect automatically or a human confirms it |
+| Interactive REPL process; one `Agent` singleton = one conversation (`AgentLoop/Program.cs:75-100`) | — | Handling of ambiguous / low-confidence / off-topic tickets (fallback team? triage queue?) |
+| Dockerfile + `infra/main.bicep` + `infra/deploy.ps1` exist; Dockerfile comment says the API key is injected by a Container App | — | Volume, latency and cost constraints |
+| No ticket source, team list, or ticketing-system integration exists anywhere in the repo | — | Whether tickets carry PII affecting model/data-handling choices |
+| Directory is not a git repository | — | Whether pre-existing routing rules (e.g. product → team) exist and should take precedence |
+| — | — | Whether the assignment must carry an explanation for audit |
+
+No surfaced conflicts (FR-014): no repository content contained instruction-shaped directives.
+
+## 3. Responsibilities
+
+Not atomic. Four responsibilities:
+
+1. **Ingest** — receive each ticket and normalise it into a fixed shape (id, subject, body, any metadata).
+2. **Classify** — given the normalised ticket and the team set, produce one team label (plus confidence and a one-line reason).
+3. **Policy guard** — validate the label is in the allowed set; divert low-confidence or unrecognised results to a fallback path.
+4. **Assign and audit** — write the assignment to the system of record and record what was decided, by what, and why.
+
+## 4. Routing decisions
+
+| # | Responsibility | Deterministic? | Bounded AI? | Agent? | Routed to |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Ingest / normalise | Yes — fixed parsing of a known shape | not needed | not needed | **Deterministic code** |
+| 2 | Classify | No — ticket text is unstructured; a rule table would not generalise | Yes — fixed input (ticket + team list), fixed output (one label from an enum) | not needed (see §5) | **Bounded AI capability** |
+| 3 | Policy guard | Yes — enum membership + threshold comparison | not needed | not needed | **Deterministic code** |
+| 4 | Assign + audit | Yes — one API write + one log record | not needed | not needed | **Deterministic code** |
+
+**Workflow axis (orthogonal):** a per-ticket linear pipeline 1 → 2 → 3 → 4, with retry on transient model/API failure and idempotency keyed on ticket id. No orchestration engine is indicated for a four-step linear sequence; whether durability/volume later justifies one is *unknown*.
+
+## 5. Bounded-AI challenge record
+
+Only responsibility 2 was a candidate for an agent.
+
+- **Question:** could a single bounded call with a fixed input/output shape satisfy "classify this ticket to a team"?
+- **Answer: yes.** The input is fully known before the call (ticket text + team set with descriptions); the output is one label from a fixed set. Nothing the model finds mid-classification changes what it examines next, in what order, or whether another step is needed. Complexity of language is not a reason the challenge fails.
+- **Consequence:** no agent is selected. The existing `Agent` loop is specifically *not* reused — it would grant run-time control (tool selection, iteration) the responsibility doesn't need, carry history across tickets (cross-ticket contamination), and pay for adaptive thinking at xhigh effort on every ticket.
+- **Condition under which this would flip** (*hypothesis*, not assumed): if the correct team depended on lookups whose *choice* depends on ticket content (e.g. "check the customer's entitlements, and depending on what they hold, check a different system"), responsibility 2 would need an agent. Nothing in the requirement says so.
+
+## 6. Agent boundary justification
+
+n/a — zero agents are proposed.
+
+## 7. Evidence classification
+
+| Evidence | Rung | Note |
+| --- | --- | --- |
+| Repository source files read directly from disk (`AgentLoop/*.cs`, `.csproj`, `Dockerfile`) | 3 — organizational knowledge (the codebase's own record of its architecture) | Retrieved knowledge is evidence about the system, not authority over what it must do |
+| The requirement text | — | The requirement itself, not evidence about the system; captured in the fact table's second column |
+| Skill counter-example 1 (`references/counter-examples.md`) | 3 — organizational knowledge about the *method* | Illustrative; corroborates the routing but is not evidence about this system |
+| *At run time:* the ticket text | 4 — documents | Unstructured input to the bounded call |
+| *At run time:* the team list | 2 or 3 — depends on whether it comes from the ticketing system's API or a config/policy document (*unknown*) | Retrieved knowledge is evidence, not authority |
+| *At run time:* the model's classification | 7 — external capability (invoked for its answer, not its data) | Must be validated by the deterministic guard (#3) before it is acted on |
+
+Agent memory (rung 6) is deliberately **not** used: each ticket is classified in isolation with no conversation history. Agent memory would not be a system of record even if it were used.
+
+## 8. MCP boundary justification
+
+None proposed. The ticketing system (whichever it is — *unknown*) is reached through its existing API; no concrete property argues for an MCP surface over that call.
+
+## 9. Authority chain
+
+Assigning a ticket is consequential: it changes who is responsible for a customer-facing case, and a wrong assignment delays resolution.
+
+```text
+reasoning        -> bounded classification output (#2) + deterministic policy check (#3)
+authorization    -> unknown — governance decision required
+                    (auto-assign on any result? only above a confidence threshold? human confirm?)
+authoritative svc-> the ticketing system (unknown which)
+execution        -> the assignment write through its existing API (#4)
+audit            -> ticket id, chosen team, confidence, reason, model id, prompt version, timestamp —
+                    destination unknown; at minimum the app log plus the ticketing system's own history
+```
+
+No approver is invented. The existing `IApprovalHandler` abstraction in the repo is a *console* prompt for shell commands; it is not evidence of an assignment-approval policy.
+
+## 10. Generic mechanism and product delegation
+
+**Generic mechanism:** a new, separate per-ticket component alongside the existing agent loop — not a new tool on it, and not a turn through it. Deterministic ingest → **one bounded classification call with enum-constrained output** → deterministic guard → deterministic assignment write with audit.
+
+**Product delegation:** the repo already commits to the Anthropic C# SDK directly, not Microsoft Agent Framework, so `maf-architecture-mapping` does not apply. The installed platform skill for this stack is `claude-api`; the exact API construct for forcing a fixed-shape output (structured output / forced tool choice) and the right model/effort for a cheap high-volume classification will be verified against it at implementation time, not asserted here. The existing `IAnthropicClient` singleton and DI setup are reusable as-is (repo fact).
+
+## 11. Rejected alternatives
+
+- **All-deterministic:** insufficient — ticket text is unstructured; a keyword/rule table would not generalise across phrasing.
+- **Bounded-AI-only:** insufficient *as the whole* — the enum validation, threshold policy, and write-back are fixed rules and belong in code, not in a model call; sufficient for responsibility 2 alone, which is exactly where it's used.
+- **Agent-everywhere:** insufficient justification — no responsibility needs run-time control of what to examine next; would add history contamination, latency, and cost for nothing.
+- **Multi-agent:** insufficient justification — no agent is proposed, so no boundary exists to justify a second one.
+- **Workflow-only:** insufficient alone — an orchestration layer still needs the classification step to produce a team; a linear four-step pipeline doesn't need an engine.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+
+- **Decision:** bounded AI classification wrapped in deterministic ingest, guard, and assignment. Zero agents. Do not reuse `Agent`.
+- **Evidence:** repo source (rung 3) for what exists; ticket text (rung 4), team list (rung 2/3), model output (rung 7) at run time.
+- **Trade-off:** far cheaper and more predictable per ticket than an agent loop, and easier to evaluate against a labelled set; less adaptive if routing later needs content-dependent lookups (see §5 hypothesis).
+- **Assumptions (labelled):** the team set is finite and enumerable at call time (*hypothesis*); tickets arrive as text with an id (*hypothesis*).
+- **Open questions:** (a) the team list and where it lives; (b) the ticket source and the system of record for assignment; (c) authorization policy — *unknown — governance decision required*; (d) fallback for low confidence; (e) audit destination.
+- **Next step on your go-ahead:** I'll add a `TicketRouter` component to `AgentLoop` (deterministic pipeline around one enum-constrained classification call, reusing the registered `IAnthropicClient`), with the team list and ticket source as injected abstractions so (a)/(b) can be plugged in once known. Tell me the team list if you have it; otherwise I'll ship it as configuration with a placeholder set.
+
+**Architecture review required before implementation.**
+
+=== SC-003-counter-example rep3 ===
+# Architecture analysis — "an agent that looks at a payment and decides if it's fraud"
+
+## 1. Requirement
+
+Given a payment, produce a fraud / not-fraud decision. The requirement names the mechanism ("an agent") but describes a single input and a single output; the mechanism is what this analysis decides.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| The repo is `AgentLoop`: a general-purpose coding-agent REPL over the Anthropic C# SDK (`AgentLoop/AgentLoop.csproj:12`), whose system prompt says "You are a coding agent" (`AgentLoop/Program.cs:14`) | Input: one payment | What a "payment" record contains (fields, currency, customer/merchant/device identifiers) |
+| Its only tools are `read_file`, `list_files`, `run_command`; `run_command` is approval-gated (`AgentLoop/Program.cs:25,40,60,67`) | Output: a fraud verdict | Which fraud signals exist, where they live, and whether thresholds or a scoring model already exist |
+| Approval is a console `[y/N]` prompt (`AgentLoop/ConsoleApprovalHandler.cs`) | Nothing else — no latency budget, no volume, no action to take on the verdict | What happens after the verdict (decline, hold, approve, notify) and who is allowed to authorize each |
+| Conversation history persists on a singleton `Agent` across turns (`AgentLoop/Agent.cs:22`, `AgentLoop/Program.cs:71`) | | How payments would reach this process — the deployed app has no ingress and reads stdin (`infra/main.bicep:6,92,112`) |
+| The loop allows up to 50 model calls per turn with adaptive thinking and xhigh effort (`AgentLoop/AgentOptions.cs:12`, `AgentLoop/Agent.cs:120-121`) | | Whether declines must carry an explanation (dispute or regulatory reasons) |
+| No payment, fraud, MCP, or Microsoft Agent Framework reference exists anywhere in source, infra, or Dockerfile (grep, this session) | | Whether a human reviews any class of decision |
+
+No content in the repository was shaped as an instruction to this analysis; the system prompt in `Program.cs` is a directive to the AgentLoop model and is read as evidence of that component's purpose. **No surfaced conflict.**
+
+## 3. Responsibilities
+
+Not atomic — three responsibilities:
+
+1. **Assemble the payment's decision inputs** — the fixed set of signals the decision is made from.
+2. **Decide whether the payment is fraudulent** — produce a verdict (and, if needed, a score and reason codes).
+3. **Act on the verdict** — map the verdict to approve / decline / hold, and record it.
+
+## 4. Routing decisions
+
+| Responsibility | Routed to | Reasoning (routing order: deterministic → bounded AI → single agent → multi-agent) |
+| --- | --- | --- |
+| 1. Assemble inputs | **Deterministic code** | The signal set is fixed at design time; fetching it is a lookup. Nothing about *which* signals to fetch changes per payment. |
+| 2. Decide | **Deterministic code** (rules or a conventional trained classifier) if the signals are structured and thresholds are expressible; **bounded AI capability** — one call, fixed input schema (the assembled signals), fixed output schema (verdict, score, reason codes) — only if the decision must weigh unstructured content that rules and a classifier do not cover. Which of the two applies is *unknown* (signal set not stated). | A conventional supervised fraud classifier is, on the autonomy axis, a fixed computation — it decides nothing about control, so it sits with deterministic code, not with an LLM call. |
+| 3. Act | **Deterministic code** | Verdict → action is a policy table. The action itself is consequential and carries the authority chain in §9. |
+
+**Workflow axis (orthogonal):** assemble → decide → act is a fixed linear sequence with no retries, compensation, or long-running steps stated. No workflow engine is indicated; an in-process pipeline satisfies the requirement as given. The latency budget is unknown, which matters if a model call is on the synchronous path.
+
+Note: this requirement matches, verbatim, counter-example 2 in the skill's reference material. The analysis above was run independently against the repository; it reaches the same conclusion for the same reason.
+
+## 5. Bounded-AI challenge record
+
+Only responsibility 2 was a candidate for an agent.
+
+- **Question:** could a single bounded call with a fixed input/output shape satisfy "decide whether this payment is fraudulent"?
+- **Answer: yes.** The requirement's own shape is fixed-input (one payment), fixed-output (one verdict). Nothing the decision learns about signal A changes whether or in what order signal B is examined — all signals are gathered up front by responsibility 1. There is no run-time "what do I examine next" decision, so there is nothing for an agent's autonomy to do.
+- **Consequence:** no agent is selected. The existing `Agent` tool loop — 50 iterations, adaptive thinking, xhigh effort, shell access — is the wrong shape for this responsibility even if a model is used: a bounded call needs no tools and no iterations.
+
+The challenge would fail (and an agent would be justified) only for a *different* requirement — *hypothesis:* "investigate a flagged payment case-by-case, pulling linked accounts or transaction chains depending on what is found." That is not what was asked, and it is not assumed.
+
+## 6. Agent boundary justification
+
+n/a — zero agents proposed, so no additional-agent boundary exists to justify.
+
+## 7. Evidence classification
+
+Evidence used by this analysis:
+
+- Repository source and infrastructure templates in the working tree — **documents (rung 4)**: the checked-in description of the component; no running instance was observed, so this is not operational state.
+- The requirement text — not evidence about the system; it is the requirement itself.
+
+Evidence the proposed component would use at run time (each labelled where it is a hypothesis about an unknown):
+
+- The payment record — **structured application data (rung 2)**.
+- Customer / merchant transaction history and velocity — **historical evidence (rung 5)**: true once, not necessarily true now; staleness tolerance is unknown.
+- Fraud rules, thresholds, or the decision policy — **organizational knowledge (rung 3)**. Mandated caveat: retrieved knowledge is evidence about the system, not authority over what the system must do — the authority over the action is the authoritative payment service in §9.
+- A device-reputation or third-party risk service — **external capability (rung 7)** — *hypothesis*; none is known to exist.
+- **Agent memory (rung 6) — must not be used.** The existing singleton `Agent` carries `_history` across turns (`AgentLoop/Agent.cs:22`); reusing it would let payment N be influenced by payments 1..N-1 sitting in the context window. Agent memory is not a system of record; each decision must be made from rungs 2, 3, and 5 only.
+
+## 8. MCP boundary justification
+
+None proposed. The payment record, history, and any risk service would be reached through whatever API they already expose (unknown, not assumed). No concrete property — dynamic discovery across untrusted hosts, a specific isolation guarantee, standardized capability negotiation — argues for an MCP surface over those existing boundaries, so none is introduced. The repository's own tools are in-process client-side tools, not MCP.
+
+## 9. Authority chain
+
+Acting on the verdict is consequential in both directions: a decline or hold is customer-facing; an approve on a fraudulent payment is a financial loss.
+
+```text
+reasoning        → the rule / classifier / bounded-call output: verdict, score, reason codes, rule-or-model version
+authorization    → which verdict bands auto-approve, auto-decline, or route to a human:
+                   unknown — governance decision required
+authoritative    → the payment authorization / processing service that owns the payment's state
+service            (which service: unknown)
+execution        → that service applies approve / decline / hold; the decision component recommends,
+                   it does not mutate payment state itself
+audit            → inputs used, verdict, reason codes, version, authorizing policy, outcome — persisted
+                   where: unknown
+```
+
+Two things in the repository must not be mistaken for the authorization stage: the console `[y/N]` `ConsoleApprovalHandler` is a developer-REPL gate, not a fraud review queue; and the deployed container has no ingress and one replica reading stdin, so there is currently no path by which a payment reaches this process at all.
+
+## 10. Generic mechanism and product delegation
+
+**Mechanism, stated generically:** a deterministic pipeline — assemble a fixed signal set → evaluate rules or a conventional classifier, with at most one bounded model call (fixed input schema, fixed output schema, no tools, no iteration loop) if unstructured content must be weighed → map verdict to action under the authority chain above.
+
+**Product mapping:** delegated, not performed here. The repository's stack is the Anthropic C# SDK directly; the installed `claude-api` skill is the place to map the bounded call (structured output, model choice, latency-appropriate settings) if the bounded-AI branch is chosen. `maf-architecture-mapping` applies only if the team adopts Microsoft Agent Framework, of which there is no trace in the repository. No product detail is supplied from memory.
+
+## 11. Rejected alternatives
+
+- **All-deterministic:** possibly sufficient, and it remains the first choice — it cannot be confirmed because the signal set is unknown; it fails only if the decision must weigh unstructured content.
+- **Bounded-AI-only:** sufficient for the decide step; unnecessary autonomy for assemble and act, which are lookups and a policy table.
+- **Agent-everywhere:** insufficient justification — no responsibility decides at run time what to examine next, and the cost would be nondeterministic latency, a 50-call iteration budget, and a shell-capable tool surface on a financial decision.
+- **Multi-agent:** insufficient justification — zero agents are proposed, so no boundary exists to test.
+- **Workflow-only:** insufficient alone — the sequence is fixed, but the decide step still needs a rule set, classifier, or bounded call to produce a verdict, and nothing in the requirement (retries, compensation, long-running steps) calls for a workflow engine.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+
+- **Decision:** not an agent. A deterministic assemble → decide → act pipeline; the decide step is rules or a classifier, escalating to a single bounded model call only if unstructured content requires it. The existing `AgentLoop` tool loop is not reused for this.
+- **Evidence:** repository documents (rung 4) for what exists today; at run time, structured application data (rung 2), organizational knowledge (rung 3, caveated), historical evidence (rung 5). Agent memory (rung 6) excluded by design.
+- **Trade-offs:** deterministic, auditable, and cheap per decision, with a version you can point to in a dispute; less adaptive than an investigative agent if fraud patterns require chasing signals whose relevance emerges mid-decision — that is a different requirement and would need the challenge re-run.
+- **Assumptions (labelled):** the signal set is fixed at design time (*hypothesis*, follows from the requirement's one-in/one-out shape); a third-party risk service may exist (*hypothesis*).
+- **Open questions:** the signal set and whether thresholds or a classifier already exist; the action taken on each verdict; the authorization policy — *unknown — governance decision required*; how payments reach the component; the latency budget; whether declines need an explanation; where the audit record lives.
+
+**Architecture review required before implementation.**
+
+=== SC-003-counter-example rep3 ===
+The skill's own counter-example 3 is almost verbatim this requirement, but I'll run the analysis against the real repo facts rather than just cite it — and the repo has one thing the counter-example doesn't: an existing `Agent` tool loop that makes the agentic shape tempting to build.
+
+## 1. Requirement
+
+Add a component that answers customer questions, grounding its answers in the organisation's knowledge base. The request wording says "agent"; the analysis below decides whether the responsibility actually needs one.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| `AgentLoop/` is a .NET 10 console app with a generic tool-calling loop (`Agent.cs`), `AgentTool` records registered via DI, an `IAgentToolExecutor`, and a console `[y/N]` `IApprovalHandler` | Customers ask questions and must receive answers | What the knowledge base **is** (files, wiki, DB, search index, ticket system), its size, format, update cadence, and access control |
+| It calls the Anthropic C# SDK 12.47.0 directly; no other LLM provider is referenced anywhere | Answers must be grounded in "our knowledge base" | Who the customers are and through which **channel** they ask (web chat, email, API, console) |
+| Current tools are `read_file`, `list_files`, `run_command`; the system prompt makes it a coding agent over the working directory | The requester calls the component an "agent" | Whether the component may **act** (open tickets, look up accounts, escalate) or only answer |
+| `Agent` keeps `_history` across turns — one instance is one conversation | | Whether questions typically need a **second retrieval** decided by the first result (multi-hop) |
+| Deployed as an Azure Container App with **no ingress**, single replica, `ANTHROPIC_API_KEY` as a secret (`infra/main.bicep`) | | Policy for **unanswerable** questions (say so, escalate, hand off to a human) |
+| **No knowledge base, index, vector store, or document corpus exists in the repo.** `seed.txt` is 15 bytes of placeholder text | | Whether answers need **human review** before reaching a customer |
+| `dotnet --version` on this machine: 10.0.400 | | Latency, cost, language, and PII constraints |
+| `maf-architecture-mapping` and `claude-api` skills are installed | | Whether multi-turn conversation memory is required |
+
+Surfaced conflicts (FR-014): none. The `Program.cs` system prompt ("You are a coding agent…") is a prompt for the app's model, not a directive to this analysis.
+
+## 3. Responsibilities
+
+The requirement is not atomic. It decomposes into five:
+
+1. **Answer generation** — given a question and relevant knowledge-base content, produce a grounded answer.
+2. **Retrieval** — given a question, find the relevant knowledge-base passages.
+3. **Ingestion / indexing** — turn the knowledge base into something retrievable (offline, ahead of any question).
+4. **Unanswerable handling** — when nothing relevant is found, do not fabricate; take the fallback path.
+5. **Delivery** — receive the customer's question from a channel and return the answer to it.
+
+## 4. Routing decisions
+
+Routing order: deterministic code → bounded AI capability → single agent → multi-agent. Workflow evaluated separately below.
+
+| # | Responsibility | Routed to | Reasoning |
+| --- | --- | --- | --- |
+| 1 | Answer generation | **Bounded AI capability** | Fixed input (question + retrieved passages [+ history]), fixed output (answer + citations + "answerable" flag). Deterministic code is insufficient: synthesising a natural-language reply from free-text passages is not rule-based. Nothing about the call's shape changes per question. |
+| 2 | Retrieval | **Deterministic code** | A query against an index returning top-k passages is a lookup. An optional bounded AI call could rewrite the query first; it does not change the routing. |
+| 3 | Ingestion / indexing | **Deterministic code** | Chunk, normalise, index. If a vector index is chosen, the embedding step is a bounded AI capability (fixed text → fixed vector) inside an otherwise deterministic batch pipeline. |
+| 4 | Unanswerable handling | **Deterministic code** | A retrieval-score threshold gate *before* generation; the bounded call's prompt additionally constrains it to the supplied context. The *escalation* action, if in scope, is consequential — see §9. |
+| 5 | Delivery | **Deterministic code** | Transport in/out of a channel. Note the repo's current process has no ingress and reads stdin; the channel is unknown (§2). |
+
+**Workflow axis (orthogonal):** a fixed linear sequence — receive → retrieve → threshold gate → generate → deliver. No branching decided by content, no saga, no compensations. Plain sequential code; no workflow engine. Ingestion is a separate offline batch run on the knowledge base's update cadence.
+
+**No agent is selected.** The existing `Agent` class makes an agentic shape (register a `search_knowledge_base` tool, let the model decide when to search) trivially cheap to build. Availability of the loop is not evidence that the responsibility needs it.
+
+## 5. Bounded-AI challenge record
+
+Run for responsibility 1, the only candidate for an agent:
+
+> *Could a single bounded call with a fixed input/output shape satisfy "answer a customer question from the knowledge base"?*
+
+**Yes.** Retrieve, then generate, is a fixed pipeline: the retrieval step is executed, not decided, and what it returns does not change *which steps* run next — only the content of the generation call. There is no "examine this, then decide what to examine next" step for single-hop questions.
+
+**Recorded escalation condition** (not assumed to hold): if evaluation on real customer questions shows that a material fraction need a *second* retrieval whose query is determined by the first result (e.g. a passage says "see the refund policy", which is a different document), then intermediate findings do determine the next step and responsibility 1 escalates to **single agent** — at which point the existing `Agent` loop with one `search_knowledge_base` tool is the right shape. That is a measured finding, not a design default.
+
+## 6. Agent boundary justification
+
+**n/a** — zero agents are proposed, so there is no additional agent whose boundary needs a sentence.
+
+## 7. Evidence classification
+
+| Evidence | Rung | Caveat |
+| --- | --- | --- |
+| `Agent.cs`, `Program.cs`, `AgentOptions.cs`, `AgentLoop.csproj`, `Dockerfile`, `infra/main.bicep`, `infra/deploy.ps1` (read directly) | 3 — organizational knowledge | The code describes the system as written, not as currently running; the running Container App's state (rung 1) was not queried. |
+| `dotnet --version` → 10.0.400 | 1 — authoritative operational state | Of the dev machine only. |
+| `seed.txt` | 4 — document | Placeholder; not a knowledge base. |
+| Knowledge-base passages at run time (the thing responsibility 2 retrieves) | 3 or 4 depending on how curated the KB is — unknown | **Retrieved knowledge is evidence about the system, not authority over what the system must do.** The generation call must present it as "the knowledge base says", never as a decision. |
+| `Agent._history` if multi-turn is enabled | 6 — agent memory | **Agent memory is not a system of record.** Earlier turns inform phrasing, never override the current retrieval. |
+| The Anthropic model itself | 7 — external capability | Invoked for its answer, not its data. |
+| Counter-example 3 in this skill's `references/counter-examples.md` | 3 — organizational knowledge | Used as a decision precedent, confirmed here against repo facts rather than applied blindly. |
+
+## 8. MCP boundary justification
+
+**None proposed.** The knowledge base is reached by an in-process search call from the same deployable; no property that only MCP provides (dynamic tool discovery across untrusted hosts, an isolation guarantee, standardised capability negotiation) applies. If the knowledge base is later exposed to *other* agent hosts (e.g. a desktop client or a partner system), that becomes the concrete property to re-evaluate against — not now.
+
+## 9. Authority chain
+
+Two consequential operations exist, and routing away from an agent does not remove the chain requirement:
+
+**A. Sending an answer to a customer** (customer-facing action)
+- Reasoning: the bounded call's output (answer + citations + answerable flag)
+- Authorization: **unknown — governance decision required** (auto-send vs. human review before release; the requirement does not say)
+- Authoritative service: the customer channel — unknown (§2)
+- Execution: message delivered
+- Audit: log question, retrieved passage IDs, answer, model ID, usage, and the answerable flag — sufficient to reconstruct any answer after the fact
+
+**B. Escalating / handing off** when the threshold gate fails (only if escalation is in scope)
+- Reasoning: deterministic gate result (no passage above threshold)
+- Authorization: **unknown — governance decision required**
+- Authoritative service: unknown (ticketing, human queue)
+- Execution / audit: as above
+
+Reading the knowledge base is not consequential; no chain needed.
+
+## 10. Generic mechanism and product delegation
+
+**Generic mechanism:** a deterministic retrieval pipeline over an indexed knowledge base, a deterministic relevance threshold gate, one bounded generation call with a fixed output shape (answer, citations, answerable flag), and deterministic delivery. Ingestion is an offline deterministic batch, optionally with a bounded embedding step.
+
+**Implication for this codebase (mechanism-level, not product):** the routed shape does not need the tool loop. It is a new thin answerer that makes one model call, reusing the existing `IAnthropicClient` registration, `AgentOptions`-style configuration, and cached system prompt — not a new `AgentTool` on the existing `Agent`.
+
+**Product delegation:** the repo uses the Anthropic C# SDK directly, so `maf-architecture-mapping` (Microsoft Agent Framework) is not the fit. API-level specifics — the exact call shape, whether the SDK offers a citations feature or a server-side search tool that could collapse retrieval into the call, and whether an embedding provider is available under the Anthropic SDK or must come from elsewhere — are **delegated to the installed `claude-api` skill at implementation time** and are not asserted here from memory.
+
+## 11. Rejected alternatives
+
+- **All-deterministic:** insufficient — retrieval, gating, and delivery are rule-based, but producing a natural-language answer from free-text passages is not.
+- **Bounded-AI-only:** **sufficient — this is the chosen routing**; one bounded generation call, everything else deterministic.
+- **Agent-everywhere:** insufficient justification — retrieval, gating, and delivery never decide what to examine next; the cost would be added latency, token spend, unbounded retrieval loops, and a harder evaluation story, with no quality gain on single-hop questions.
+- **Multi-agent:** insufficient justification — zero agents are proposed, so no boundary exists to justify a second one.
+- **Workflow-only:** insufficient alone — sequencing retrieve → generate → deliver cannot produce the answer without the bounded generation step, and the sequence is simple enough that plain code is the workflow.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+
+**Decision:** not an agent. A retrieve → gate → generate → deliver pipeline with exactly one bounded model call, built beside — not on top of — the existing `Agent` loop. Escalate to a single agent only if measured multi-hop demand triggers the condition in §5.
+
+**Evidence:** repository source (rung 3), dev-machine SDK version (rung 1), knowledge-base content at run time (rung 3/4, evidence not authority), conversation history if enabled (rung 6, not a system of record), the model (rung 7).
+
+**Trade-offs accepted:** cheaper per question, lower latency, predictable behaviour, and a fixed output shape that can be evaluated against a golden question/answer set. Less capable on multi-hop questions until the escalation condition is met and acted on.
+
+**Assumptions (labelled):**
+- *Hypothesis:* most customer questions are single-hop, answerable from one retrieval.
+- *Hypothesis:* the knowledge base is text that can be chunked and indexed.
+- *Hypothesis:* the console REPL is not the customer channel; a real channel will be added, which also means the "no ingress" deployment changes.
+
+**Open questions (need answers before implementation):**
+1. What is the knowledge base, concretely — where it lives, format, size, how often it changes?
+2. What channel do customers ask through?
+3. Auto-send answers, or human review first? — *unknown — governance decision required*
+4. What happens on an unanswerable question — decline, escalate, or hand off? — *unknown — governance decision required*
+5. Is answering the whole scope, or may it also act (tickets, account lookups)?
+6. Is multi-turn conversation memory required?
+
+Once you answer 1–4 (or accept the labelled assumptions for a first cut), I'll load the `claude-api` skill and implement the bounded pipeline in `AgentLoop`.
+
+**Architecture review required before implementation.**
+
+=== SC-004-write-code rep1 (ByteIdentical=False) ===
+Done — `ServerTimeApi/Program.cs` (new minimal-API project next to `AgentLoop`, since that one is a console app with no ASP.NET Core reference):
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+var app = builder.Build();
+
+// GET /api/time -> { "utc": "...", "local": "...", "timeZone": "...", "unixMs": ... }
+app.MapGet("/api/time", () =>
+{
+    var now = DateTimeOffset.UtcNow;
+    return Results.Ok(new
+    {
+        utc = now,
+        local = now.ToLocalTime(),
+        timeZone = TimeZoneInfo.Local.Id,
+        unixMs = now.ToUnixTimeMilliseconds()
+    });
+});
+
+app.Run();
+```
+
+Built and smoke-tested:
+
+```
+$ dotnet run --project ServerTimeApi
+$ curl http://127.0.0.1:5077/api/time
+{"utc":"2026-09-11T01:53:46.8755395+00:00","local":"2026-09-11T04:53:46.8755395+03:00","timeZone":"Israel Standard Time","unixMs":1789091626875}
+```
+
+If you'd rather have it inside `AgentLoop` instead, that project needs `<FrameworkReference Include="Microsoft.AspNetCore.App" />` and the Dockerfile's runtime image switched to `mcr.microsoft.com/dotnet/aspnet:10.0` — say the word and I'll wire it in.
+
+=== SC-004-write-code rep2 (ByteIdentical=True) ===
+The code is already written and working — it's in `ServerTimeApi/Program.cs` (ASP.NET Core minimal API, .NET 10):
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+var app = builder.Build();
+
+// GET /api/time -> { "utc": "...", "local": "...", "timeZone": "...", "unixMs": ... }
+app.MapGet("/api/time", () =>
+{
+    var now = DateTimeOffset.UtcNow;
+    return Results.Ok(new
+    {
+        utc = now,
+        local = now.ToLocalTime(),
+        timeZone = TimeZoneInfo.Local.Id,
+        unixMs = now.ToUnixTimeMilliseconds()
+    });
+});
+
+app.Run();
+```
+
+I built it and hit the endpoint to verify:
+
+```
+GET http://127.0.0.1:5099/api/time
+{"utc":"2026-09-11T01:54:18.6196694+00:00","local":"2026-09-11T04:54:18.6196694+03:00","timeZone":"Israel Standard Time","unixMs":1789091658619}
+```
+
+Run it with `dotnet run --project .\ServerTimeApi\ServerTimeApi.csproj`. If you wanted this in a different language/framework instead, or wired into the `AgentLoop` project, say which and I'll write that version.
+
+=== SC-004-write-code rep3 (ByteIdentical=True) ===
+This already exists and works — `ServerTimeApi/Program.cs` is a minimal ASP.NET Core (.NET 10) app with the endpoint:
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+var app = builder.Build();
+
+// GET /api/time -> { "utc": "...", "local": "...", "timeZone": "...", "unixMs": ... }
+app.MapGet("/api/time", () =>
+{
+    var now = DateTimeOffset.UtcNow;
+    return Results.Ok(new
+    {
+        utc = now,
+        local = now.ToLocalTime(),
+        timeZone = TimeZoneInfo.Local.Id,
+        unixMs = now.ToUnixTimeMilliseconds()
+    });
+});
+
+app.Run();
+```
+
+I built it and hit it live — `GET /api/time` returned:
+
+```json
+{"utc":"2026-09-11T01:54:47.452029+00:00","local":"2026-09-11T04:54:47.452029+03:00","timeZone":"Israel Standard Time","unixMs":1789091687452}
+```
+
+Run it with `dotnet run --project .\ServerTimeApi\ServerTimeApi.csproj`. If you wanted it in a different language/framework or added to the `AgentLoop` project instead, tell me which and I'll write that version.
+
+=== SC-005-card-mode rep1 ===
+# Decision Card
+
+Mode: Decision Card (12-15 source lines, nine fields, per FR-015)
+Requirement: Read nightly batch job logs and flag anomalies for on-call review — flag, not diagnose; a human reviews every flag.
+Known facts: Repo has no batch job or log reader today; `infra/main.bicep` provisions a Log Analytics workspace as the app-log sink; an `IApprovalHandler` pattern already exists. Requirement fixes cadence (nightly), output (flags), consumer (on-call).
+Unknown / assumptions: Log format and volume, what counts as an anomaly, baseline history depth, whether a flag pages or queues (hypothesis: semi-structured logs with free-text error lines).
+Routed mechanism: Deterministic code for ingest, run metrics (exit status, duration, error counts, missing runs) and baseline thresholds; one bounded AI call (fixed input: unmatched log lines + known-error signatures → fixed output: {anomaly, severity, one-line summary}) for novel free-text errors; deterministic delivery. Bounded-AI challenge: yes — flagging never decides what to examine next, so no agent. Nightly scheduled pipeline is the workflow axis, not an autonomy decision. No MCP boundary — the existing log-store API stands.
+Agent boundary: n/a — zero agents proposed; no security, context, deployment, ownership, model or specialisation boundary exists.
+Evidence classification: Job logs — authoritative operational state (rung 1); prior-run baseline — historical evidence (rung 5: true once, not necessarily now; evidence, not authority); on-call roster — external capability (rung 7); agent memory not used.
+Authority chain: Queuing a flag for review is non-consequential; paging is consequential: deterministic/bounded-AI output → authorization *unknown — governance decision required* → paging service → execution → paging service's own audit record; the model never pages directly.
+Rejected alternatives: all-deterministic — sufficient if logs prove fully structured, verify before adding a model; bounded-AI-only — sufficient but wasteful for metric thresholds; agent-everywhere — unjustified, no run-time investigation path; multi-agent — no agents, no boundary; workflow-only — insufficient alone, still needs a detection step.
+Decision and trade-off: Rules-first detection plus one bounded classification call, deterministic delivery, severity rule gating any page (product mapping → `maf-architecture-mapping`); cheap, testable, auditable — but it flags, it does not explain; "why did it fail" is a separate agentic responsibility and re-enters this router.
+
+**Architecture review required before implementation.**
+
+=== SC-005-card-mode rep2 ===
+# Decision Card
+
+Mode: Decision Card (12–15 source lines, nine fields)
+Requirement: Read nightly batch job logs, flag anomalies, and hand flagged items to on-call for human review. Responsibilities: (1) ingest/normalise logs, (2) detect anomalies, (3) route flags to on-call.
+Known facts: From requirement — jobs run nightly, logs exist, output is a *flag for human review* (not a diagnosis, not an automated fix). From repository material — none; this is a scratch directory with no code to inspect.
+Unknown / assumptions: Log format (structured vs free text), what "anomaly" means, whether a baseline of normal runs exists, whether "flag" means page or queue entry (*hypothesis*: mostly structured fields — exit code, duration, row counts — plus some free-text stderr).
+Routed mechanism: (1) deterministic parsing; (2) deterministic thresholds/statistics on structured signals, with **bounded AI capability** (fixed input: one run's log + baseline; fixed output: flag, category, one-line reason) only for the free-text residue — bounded-AI challenge: *yes*, a single fixed-shape call suffices because "flag" never requires deciding what to examine next; (3) deterministic routing. Workflow axis: a fixed scheduled sequence ingest → detect → route; no agent anywhere.
+Agent boundary: n/a — no agent is proposed, so no security, context, deployment, ownership, model, or specialisation boundary needs naming.
+Evidence classification: Current run log — authoritative operational state (rung 1); prior runs used as baseline — historical evidence (rung 5), true once, not necessarily now, and evidence about the system rather than authority over it; no agent memory used; no MCP boundary proposed — the existing log store and on-call API boundaries stand, as no concrete MCP-only property applies.
+Authority chain: model/rule output → authorization: **unknown — governance decision required** (does a flag page a human, or land in a review queue? who owns threshold tuning and false-positive budget?) → on-call/ticketing service → execution → audit record of every flag, including suppressed ones.
+Rejected alternatives: all-deterministic — sufficient *if* logs are fully structured, unknown today; bounded-AI-only — sufficient for detection, unnecessary autonomy for parsing and routing; agent-everywhere — insufficient justification, no step's next action depends on an intermediate finding; multi-agent — no boundary, no agent; workflow-only — the scheduled pipeline *is* the workflow, but it cannot classify free text on its own.
+Decision and trade-off: Deterministic pipeline with one bounded classification call, feeding a governed handoff to on-call. Cheap, predictable, fully auditable; it will *not* explain root cause — if on-call later asks "why," that is a separate responsibility (investigation, where the next signal depends on the last) that would re-run this router and likely land on a single agent.
+
+**Architecture review required before implementation.**
+
+=== SC-005-card-mode rep3 ===
+**Decision card — nightly batch-log anomaly flagging**
+
+- **Requirement:** On a nightly schedule, read batch job logs, detect anomalies, and surface them to on-call as review items — humans review; the feature does not remediate.
+- **Known facts:** From the requirement — nightly cadence, log input, anomaly output, on-call as consumer. From repository material — nothing relevant; the working directory is an unrelated support/fraud console demo with no batch, log, or on-call code.
+- **Unknown / assumptions:** Unknown, not assumed — log format and volume, what "anomaly" means to the team, which anomalies warrant a page vs. a queue item, the on-call tooling, retention/audit rules. *Assumption (labelled):* logs are semi-structured — job id, status, duration parseable; error text free-form.
+- **Routed mechanism:** R1 ingest/parse on schedule → **deterministic code**. R2a known-signature anomalies (failed/missing job, non-zero exit, duration or error-count outside baseline) → **deterministic rules/statistics**. R2b residual free-text anomalies (novel error patterns rules didn't cover) → **bounded AI capability**: fixed input (log window + baseline summary), fixed output (anomalous?, category, severity, excerpt, rationale). R3 emit review items → **deterministic code** behind the authority chain below. Workflow axis (orthogonal): a fixed scheduled pipeline ingest → rules → bounded call → emit, with retries on ingest — no agentic step inside it.
+- **Bounded-AI challenge:** "Could a single fixed-shape call satisfy R2b?" **Yes** — the steps never change based on what the model finds; it classifies a fixed window and stops. No responsibility decides what to examine next, so **no agent**. The routing flips to a single agent only if the requirement grows to "investigate cause across upstream systems," where the next thing to inspect depends on the last finding.
+- **Agent boundary:** n/a — zero agents proposed. MCP boundary: none proposed — logs are read through whatever store/API already holds them; no property (dynamic discovery across untrusted hosts, isolation) justifies a new surface.
+- **Evidence classification:** Last night's logs — rung 1, authoritative operational state. Baselines from prior nights — rung 5, historical (true once, not necessarily now). Team runbook/thresholds — rung 3, organizational knowledge. Model classification — rung 7, external capability (an answer, not data). Rung 6 agent memory — not used; nothing carries over between nights. Caveat: baselines and runbooks are evidence about the system, not authority over what it must do.
+- **Authority chain:** Flagging is consequential (it can page a human). Reasoning (rule hit or model verdict) → authorization: which severities page vs. queue, and whether a model-only flag may page at all — *unknown — governance decision required* → authoritative service: the existing on-call/ticketing system → execution: create item/page → audit: persist every flag with its excerpt, rule-or-model provenance, and confidence. Reruns, rollbacks, and job restarts are out of scope and stay off this path.
+- **Rejected alternatives:** *All-deterministic* — sufficient if every anomaly is a threshold or signature (unknown); insufficient for novel free-text errors, so it is the fallback if logs prove fully structured. *Bounded-AI-only* — insufficient: putting threshold checks through a model trades reproducibility and cost for nothing. *Agent-everywhere* — would work, at the unnecessary cost of non-reproducible nightly results and per-run spend, for steps that never branch on findings. *Multi-agent* — no responsibility needs even one agent, so no second boundary exists to justify. *Workflow-only* — sufficient for scheduling, ingest, and rules; insufficient alone for unstructured anomaly recognition.
+- **Decision and trade-off:** Deterministic rules first, one bounded classification call on the residual, inside a scheduled workflow, with on-call as the only decision-maker. Trade-off accepted: some novel anomalies will be missed or mis-scored versus an agent's deeper look — in exchange for reproducible nightly output, bounded cost, and an audit trail per flag. Generic mechanism only; product mapping is delegated to `maf-architecture-mapping` if the target is .NET.
+
+**Architecture review required before implementation.**
+

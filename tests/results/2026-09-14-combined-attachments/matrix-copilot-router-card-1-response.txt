@@ -1,0 +1,39 @@
+ΓùÅ skill(agentic-architecture-router)
+
+IΓÇÖm applying the card-mode architecture review: first grounding the required fields and quality gates, then routing this deterministic alert rule.
+
+ΓùÅ Read decision-framework.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\decision-framework.md
+  Γöö L1:220 (92 lines read)
+
+ΓùÅ Read quality-gates.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\quality-gates.md
+  Γöö 42 lines read
+
+ΓùÅ Read decision-card-template.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\assets\decision-card-template.md
+  Γöö 16 lines read
+
+ΓùÅ Read evidence-and-authority.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\evidence-and-authority.md
+  Γöö L1:220 (94 lines read)
+
+# Decision Card
+
+Mode: Decision Card  
+Requirement: Every five minutes, compare a supplied numeric queue length with the configured threshold and send one alert through the existing notification service when exceeded.  
+Known facts: Fact table ΓÇö repository: not read; requirement: cadence, numeric input, threshold, notification service, rule, and destination are stated; unknown: all runtime state.  
+Unknown / assumptions: ΓÇ£One alertΓÇ¥ per interval versus deduplicated incident is unresolved; atomicity: three responsibilitiesΓÇöschedule/read, compare, notify.  
+Routed mechanism: Deterministic scheduler + numeric comparison + notification call; bounded-AI challenge: a fixed input/output model call adds no value; workflow is a fixed recurring sequence.  
+Agent boundary: No agentΓÇöno runtime reasoning or adaptive next-step selection is required.  
+Agent boundary: No MCP boundaryΓÇöretain the existing notification-service integration; no MCP-specific property is supplied.  
+Evidence classification: Requirement text ΓÇö Documents (rung 4); configured rule, destination, queue value, and service state ΓÇö not observed proposed runtime sources; agent memory is not a system of record.  
+Authority chain: Reasoning: fixed comparison ΓåÆ authorization: configured rule stated, exact policy unknown - governance decision required ΓåÆ authoritative service: existing notification service, owner unknown ΓåÆ execution: send permitted alert ΓåÆ audit: delivery/outcome recording, owner unknown.  
+Rejected alternatives: all-deterministic: sufficient; bounded-AI-only: unnecessary; agent-everywhere: sufficient but adds nondeterminism and cost; multi-agent: no second-agent boundary exists; workflow-only: sufficient because the workflow contains no agentic step.  
+Decision and trade-off: Use a deterministic recurring check and existing notification service; this is predictable and low-cost, but alert deduplication, failure handling, and audit ownership remain open.  
+**Architecture review required before implementation.**
+

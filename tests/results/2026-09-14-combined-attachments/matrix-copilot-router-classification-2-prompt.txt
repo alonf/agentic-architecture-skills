@@ -1,0 +1,1 @@
+Should this be an agent? Classify this free-text support request into one of our supplied categories, or return unknown. Return a label only; do not assign or contact anyone. There is no complete rule table, and the full text and category definitions are supplied together.

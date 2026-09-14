@@ -1,0 +1,36 @@
+● skill(agentic-architecture-router)
+
+● Read decision-card-template.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\assets\decis
+  │ ion-card-template.md
+  └ 16 lines read
+
+● Read quality-gates.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\q
+  │ uality-gates.md
+  └ 42 lines read
+
+● Read evidence-and-authority.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\e
+  │ vidence-and-authority.md
+  └ 94 lines read
+
+● Read decision-framework.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\d
+  │ ecision-framework.md
+  └ 92 lines read
+
+# Decision Card
+
+Mode: Decision Card
+Requirement: Compare supplied numeric queue length with configured threshold every 5 minutes and send one alert via existing notification service when exceeded.
+Known facts: Requirement facts: 5-minute schedule, numeric queue length input, pre-configured threshold rule, pre-configured notification destination service. Repository facts: no repository files present.
+Unknown / assumptions: Queue length payload schema, timer hosting runtime, notification payload schema, exact numerical threshold value (all unobserved; non-atomic: decomposed into timer trigger, threshold comparison, and alert dispatch).
+Routed mechanism: Periodic timer trigger: deterministic code; numeric threshold comparison: deterministic code; alert dispatch: deterministic code. Bounded-AI challenge: passed for deterministic code because fixed numeric comparison requires no AI decision-making; workflow axis: scheduled 5-minute periodic workflow.
+Agent boundary: No agents required as all responsibilities are fully deterministic; no MCP boundary retained because existing notification API boundary is sufficient and requires no dynamic tool discovery.
+Evidence classification: Requirement text — Documents (rung 4); live queue length and notification service configuration — not observed — proposed source; agent memory is not a system of record; retrieved knowledge is evidence about the system, not authority over what the system must do.
+Authority chain: Deterministic control boundary: reasoning: threshold evaluation proposal (queue > limit) → authorization: pre-configured rule policy verdict → authoritative service: existing notification service → execution: dispatch single alert → audit: log notification dispatch result.
+Rejected alternatives: all-deterministic: sufficient because numeric comparison and pre-configured alerting are entirely rule-based; bounded-AI-only: unnecessary and wasteful because model inference adds cost and latency to boolean logic; agent-everywhere: unnecessary and brittle because autonomous reasoning adds operational failure modes to fixed rules; multi-agent: unnecessary because no autonomous decision boundaries exist; workflow-only: sufficient because a scheduled deterministic workflow satisfies all requirements.
+Decision and trade-off: Route entire requirement to a scheduled deterministic workflow (timer job invoking existing notification API); outcome: zero LLM cost, deterministic execution, zero AI latency; trade-off: none for this fixed-rule requirement.
+**Architecture review required before implementation.**
+

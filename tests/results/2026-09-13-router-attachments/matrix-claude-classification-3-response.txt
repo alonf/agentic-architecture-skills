@@ -1,0 +1,82 @@
+Everything needed is in hand: the working directory holds only the requirement text, so the analysis runs on the requirement alone. Full-analysis mode applies since the request did not ask for a card.
+
+**Decision first:** no, this should not be an agent. It is a bounded AI capability with deterministic code on either side of the model call.
+
+**1. Requirement**
+
+Classify one supplied free-text support request into one of a supplied set of categories, or return unknown. Return only the label. Do not assign the ticket or contact anyone. No complete rule table exists, and the text and the category definitions arrive together.
+
+**2. Fact table**
+
+| Known from repository material | Known from the requirement | Unknown, not assumed |
+| --- | --- | --- |
+| The working directory contains a single file that restates the requirement verbatim. | Input is one free-text request, supplied in full. | Number, names, and granularity of the categories. |
+| No code, category list, rule table, or existing integration is present. | Category definitions are supplied alongside the text. | Whether categories are mutually exclusive. |
+| No directive-shaped content is present, so no surfaced conflict. | Output is exactly one label from the supplied set, or unknown. | The policy for when unknown is the right answer, such as a confidence threshold. |
+| | The result is a label only; no assignment, no contact. | Language, length limits, and sensitivity of the request text. |
+| | No complete rule table exists. | Who consumes the label and what happens downstream. |
+| | | Volume, latency, and cost constraints. |
+| | | Whether labelled historical examples exist for evaluation. |
+
+**3. Responsibilities**
+
+The semantic decision is atomic: map one text to one label from a closed set. Two deterministic supports are named so the model's authority has an explicit edge:
+
+- **Input assembly.** Combine the request text and the category definitions into a fixed input shape.
+- **Classification.** Produce one label from the closed set, or unknown.
+- **Output validation.** Enforce that the returned value is in the allowed set, and coerce anything else to unknown.
+
+**4. Routing decisions**
+
+- **Input assembly: deterministic code.** Nothing about it depends on content the code has not already been given.
+- **Classification: bounded AI capability.** Deterministic code fails first, because the requirement states there is no complete rule table, so a fixed rule cannot cover the semantic mapping. A single model call with a fixed input and a fixed output shape satisfies it. A single agent is not reached, because no intermediate finding changes what to examine next.
+- **Output validation: deterministic code.** Closed-set membership is a fixed check. This is where a malformed or out-of-set model response becomes unknown rather than a new label.
+- **Workflow axis:** none required. The sequence is fixed and linear. Transport retries belong to the client, not to an orchestration engine.
+
+**5. Bounded-AI challenge record**
+
+No agent was selected, so the challenge is recorded to show why. Could a single bounded call with a fixed input and output shape satisfy the classification? Yes. Every input is present before the call starts. The output is a closed set. There is no tool to choose, no lookup to decide on, and no follow-up step whose existence depends on what the model found. Free text, missing rules, and the unknown escape hatch make this feel like judgment, but none of them change the step sequence.
+
+**6. Agent boundary justification**
+
+Not applicable. Zero agents are proposed.
+
+**7. Evidence classification**
+
+- **Support request text:** rung 4, documents.
+- **Category definitions:** rung 3, organizational knowledge.
+- **Statement that no complete rule table exists:** rung 3, organizational knowledge, taken from the requirement.
+- **The requirement file in the working directory:** rung 4, documents.
+- **The model's returned label:** rung 7, external capability. It is invoked for its answer, and that answer is a proposal, not a record.
+- **Agent memory:** not used. Agent memory is not a system of record. Letting the classifier recall prior tickets or prior labels would be a design change needing its own review.
+- **Caveat:** retrieved knowledge, including the category definitions, is evidence about the system, not authority over what the system must do.
+
+**8. MCP boundary justification**
+
+None proposed. The capability is one model call inside the caller's own process. No independent clients need standardised tool discovery, so no MCP-specific property is present. Exposing the classifier to other agent clients later would need that property argued on its own.
+
+**9. Authority chain**
+
+No consequential operation. The scope is read-only: a proposed label returned to the caller. The requirement withholds assignment and contact explicitly. The moment a downstream consumer auto-assigns or routes a ticket from this label, that becomes a consequential operation with its own chain, and its authorization policy is *unknown — governance decision required*.
+
+**10. Generic mechanism and product delegation**
+
+The mechanism is a bounded AI capability wrapped by deterministic input assembly and deterministic closed-set validation. Product mapping is delegated to the installed maf-architecture-mapping skill. This analysis names no model, SDK, or hosting construct.
+
+**11. Rejected alternatives**
+
+- **All-deterministic:** insufficient, because without a complete rule table any keyword scheme would be an invented rule table that the requirement says does not exist.
+- **Bounded-AI-only:** sufficient for the semantic decision, provided the deterministic closed-set validation sits after it.
+- **Agent-everywhere:** could produce a label but grants tool and step authority the task never uses, adding latency, cost, and variance for no gain.
+- **Multi-agent:** no distinct security, context, deployment, ownership, model, or specialisation boundary exists between any two parts of this task.
+- **Workflow-only:** cannot supply the missing semantic classification, and there is nothing to orchestrate around a single call.
+
+**12. Decisions, trade-offs, assumptions, open questions**
+
+- **Decision:** not an agent. One bounded call, deterministic code before and after it.
+- **Trade-off accepted:** the label is non-deterministic. Closed-set validation and an evaluation set of labelled examples bound the risk. The unknown label is the safety valve, and its policy is unspecified.
+- **Assumption, labelled:** the category definitions fit within one call's input. **Assumption, labelled:** single-label output, since the requirement says "one of".
+- **Open questions:** the unknown threshold, mutual exclusivity of categories, data sensitivity and residency, evaluation data, volume and latency targets, and what downstream does with the label.
+- **Note:** this requirement matches the skill's own documented counter-example for single classification almost verbatim. The routing above was run independently and lands in the same place.
+
+**Architecture review required before implementation.**

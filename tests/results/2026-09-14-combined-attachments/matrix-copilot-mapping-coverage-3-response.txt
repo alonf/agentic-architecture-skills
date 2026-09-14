@@ -1,0 +1,68 @@
+ΓùÅ skill(maf-architecture-mapping)
+
+IΓÇÖm in the construct-mapping step. IΓÇÖll ground the coverage strictly in the skillΓÇÖs source material, then separate demonstrated evidence from slide-only or unverified claims without adding API or availability assertions.
+
+ΓùÅ Read runtime-and-control.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\runtime-and-control.md
+  Γöö 62 lines read
+
+ΓùÅ Read assurance.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\assurance.md
+  Γöö 55 lines read
+
+ΓùÅ Read construct-map.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\construct-map.md
+  Γöö 67 lines read
+
+ΓùÅ Read maf-surface.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\maf-surface.md
+  Γöö 116 lines read
+
+**Step 2 ΓÇö construct-map coverage**
+
+The source material treats all twelve rows as staged mechanism-to-construct beats. ΓÇ£DemonstratedΓÇ¥ below means demonstrated or verified in the supplied H08/W20/demo evidenceΓÇönot that the constructΓÇÖs current SDK surface or availability has been independently revalidated.
+
+| Row | Responsibility | MAF construct | Coverage |
+|---:|---|---|---|
+| 1 | Runtime-directed single-agent reasoning | `AIAgent` with a bound C# tool | **Demonstrated** as the single-agent construct. The adapterΓÇÖs current name/signature remains a dated surface fact, not an assertion here. |
+| 2 | Conversation state within one interaction | `AgentSession` | **Demonstrated** conceptually. Current session naming and creation details are dated in the surface file and must be rechecked before use. |
+| 3 | Citable external evidence retrieval | `AIContextProvider` backed by a search provider | **Demonstrated** as retrieval/context injection, distinct from agent memory. |
+| 4 | Recall of prior agent findings across sessions | Custom `AIContextProvider` | **Demonstrated** as a memory/context pattern, with the limitation that recalled content is a hypothesis requiring re-verification. |
+| 5 | On-demand procedural knowledge | `AgentSkillsProvider` plus `SKILL.md` | **Demonstrated** as progressive disclosure of declarative procedure, not executable agent code. |
+| 6 | Independently owned MCP tool surface | `McpClient` discovering an MCP server | **Demonstrated**, but only where the approved architecture includes the MCP-specific boundary property. Cross-team ownership alone does not establish this row. |
+| 7 | Human answer required during an MCP call | MCP elicitation | **Demonstrated** as the protocol-level pause/resume mechanism. The exact current elicitation API remains unasserted. |
+| 8 | Fixed sequence with an authorization boundary | Workflow graph with a human gate | **Demonstrated**. This covers a workflow gate at a graph transition, not handoff or general governance middleware. |
+| 9 | Approval before one consequential tool call | `ApprovalRequiredAIFunction` | **Demonstrated** as per-call approval, distinct from row 8ΓÇÖs workflow-level gate. |
+| 10 | Bounded consultation of a second agent | Agent-as-tool over its callable API; MCP only if separately justified | **Demonstrated**. This is bounded capability use, not peer delegation. |
+| 11 | Task delegation to a peer agent | Agent-card discovery and A2A task delegation | **Demonstrated** in the source material as the peer-delegation pattern. Compatibility between possible A2A wire bindings was **not** independently verified. |
+| 12 | Operational execution location | Hosted runtime | **Demonstrated/verified at the runtime-property level**: the material and deployment evidence cover hosted execution, per-session isolation, identity observation, and lifecycle concerns. They do not establish a permanent platform guarantee or scaling model. |
+
+**Constructs explicitly not demonstrated**
+
+- **Handoff:** slide/documentation-level workflow orchestration only. It must not be counted as demonstrated merely because row 8 demonstrates a workflow with a human gate.
+- **Group chat:** compared as another multi-agent composition mode, but not staged. Its C# builder name is intentionally unasserted.
+- **Harness agent:** named on a slide, not implemented in the demonstration.
+- **Governance middleware:** not demonstrated as middleware. The demonstrated authority mechanisms are the row 8 workflow gate, row 9 per-call approval, and the delegated-access consent requirement described in runtime/control.
+- **Standalone protocol construct:** not a separate demonstrated row; protocols are treated as ingress, negotiation, and binding decisions.
+
+Handoff and group chat must therefore not be inferred from rows 10 or 11: row 10 is agent-as-tool, while row 11 is A2A delegation.
+
+**Runtime and control coverage**
+
+The mapping still requires separate decisions about hosting placement, ingress contract, protocol/binding compatibility, isolation, lifecycle ownership, identity propagation, and the applicable human-authority layer. The evidence supports per-session sandbox isolation and observed caller-identifier propagation, but not an automatic delegated-access grant. A2A binding compatibility remains open.
+
+**Assurance and evidence limits**
+
+For each demonstrated row, assurance must independently:
+
+1. **Observe** tool calls, arguments, intermediate results, and approval outcomes.
+2. **Evaluate** behavior against the responsibility-specific requirement.
+3. **Verify** that observed autonomy still matches the approved routing decision.
+4. **Regress** those checks after changes.
+
+The material does not constitute proof of current SDK signatures, namespaces, package versions, GA/preview status, or production suitability. Those facts are dated in `maf-surface.md` and must be checked against live documentation before implementation or a current design claim. No implementation or current-availability claim follows from this coverage map.
+

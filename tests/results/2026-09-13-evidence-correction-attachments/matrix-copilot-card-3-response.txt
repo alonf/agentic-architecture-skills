@@ -1,0 +1,23 @@
+● List directory .
+  └ 1 file found
+
+/ Search (glob)
+  │ "**/*"
+  └ 1 file found
+
+● Read prompt.txt
+  └ 1 line read
+
+● Inspect workspace files to find project files (shell)
+  │ Get-ChildItem -Force -Recurse . | Select-Object FullName
+  └ 4 lines…
+
+Decision Card
+
+- Schedule: check every 5 minutes.
+- Input: current numeric queue length.
+- Rule: if queue length > configured threshold, trigger an alert.
+- Action: send exactly one alert through the already-configured notification service.
+- Otherwise: take no action.
+- Config: threshold and destination are already set and should not be changed by this decision.
+

@@ -1,0 +1,108 @@
+● skill(agentic-architecture-router)
+
+I’m routing this operational rule through the least-autonomous mechanism and checking its control boundaries.
+
+● Read architecture-analysis-template.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\assets\archi
+  │ tecture-analysis-template.md
+  └ 41 lines read
+
+● Read decision-framework.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\d
+  │ ecision-framework.md
+  └ 92 lines read
+
+● Read quality-gates.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\q
+  │ uality-gates.md
+  └ 42 lines read
+
+● Read evidence-and-authority.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\e
+  │ vidence-and-authority.md
+  └ 87 lines read
+
+## 1. Requirement
+
+Every five minutes, compare a supplied numeric queue length with an already configured threshold and send one alert to an already configured destination through the existing notification service when the threshold is exceeded.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| No repository material was supplied. | Queue length is numeric and supplied to the process. | Whether repeated alerts are intended while the queue remains over threshold. |
+|  | Threshold, destination, and notification service already exist. | Authorization, rate-limit, retry, deduplication, and audit policies. |
+|  | The comparison runs every five minutes. | Ownership of the scheduler and authoritative configuration source. |
+
+## 3. Responsibilities
+
+1. Schedule the five-minute evaluation and obtain the supplied queue length.
+2. Compare the numeric value against the configured threshold.
+3. Send exactly one alert through the existing notification service when the rule evaluates true.
+
+## 4. Routing decisions
+
+| Responsibility | Least-autonomous mechanism | Decision |
+| --- | --- | --- |
+| Schedule and receive input | Deterministic code or scheduler | A fixed cadence and fixed input acquisition need no interpretation. |
+| Evaluate threshold | Deterministic rule | Numeric comparison is fully specified: `queueLength > threshold`. |
+| Deliver alert | Deterministic service call | The destination and integration are already configured; invoke the existing notification service only when the rule is true. |
+
+No AI capability, agent, or multi-agent mechanism is justified. A fixed workflow/scheduled job may host these deterministic steps, but it does not introduce autonomy.
+
+## 5. Bounded-AI challenge record
+
+No responsibility is routed to an agent. A bounded AI call is unnecessary because each decision has a fixed input, fixed rule, and fixed action; it would add nondeterminism without supplying needed capability.
+
+## 6. Agent boundary justification
+
+n/a — zero agents are proposed.
+
+## 7. Evidence classification
+
+- The configured threshold, destination, notification service, and supplied numeric queue length are **rung 2: structured application data**, if obtained from typed configuration or APIs.
+- The five-minute cadence and “when exceeded” rule are **rung 3: organizational knowledge**, supplied in the requirement.
+- No agent memory or retrieved knowledge was used. If later retrieved, such knowledge is evidence about the system, not authority over what the system must do.
+
+## 8. MCP boundary justification
+
+**No MCP boundary.** Retain the existing notification-service integration; standardized tool discovery across independent clients is neither required nor indicated.
+
+## 9. Authority chain
+
+Sending an alert is consequential:
+
+```text
+deterministic threshold evaluation
+→ authorization / policy / process control: unknown — governance decision required
+→ existing notification service
+→ alert delivery to configured destination
+→ audit: unknown — governance decision required
+```
+
+The scheduler must deterministically enforce the configured rule and any applicable notification policy before calling the notification service.
+
+## 10. Generic mechanism and product delegation
+
+Use a **deterministic scheduled rule**: run every five minutes, evaluate `queueLength > configuredThreshold`, and make one existing-service notification call when true. Product-specific scheduler or implementation mapping is not needed for this decision.
+
+## 11. Rejected alternatives
+
+- **All-deterministic:** Sufficient; it covers scheduling, numeric evaluation, and alert delivery exactly.
+- **Bounded-AI-only:** Technically possible but insufficiently appropriate because it makes a deterministic numeric rule probabilistic.
+- **Agent-everywhere:** Functionally possible but unnecessarily grants decision authority where no runtime judgment is needed.
+- **Multi-agent:** Not justified; no distinct context, security, specialization, or decision boundary exists.
+- **Workflow-only:** Sufficient as a hosting/orchestration layer, provided its steps remain deterministic; it is not itself a reason to introduce an agent.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+
+**Decision:** This should **not** be an agent. Implement it as a deterministic scheduled check using the existing notification-service boundary.
+
+**Trade-off:** This deliberately does not infer changing alert policies, diagnose queue causes, choose recipients, or adapt the cadence; those would be separate requirements that might warrant bounded AI or agentic evaluation.
+
+**Assumption:** “Send one alert” means one notification invocation per evaluation that finds the queue length exceeded. Whether it instead requires a single alert across a sustained breach is unknown and should be specified.
+
+**Open questions:** Define repeat-alert suppression/deduplication, retry behavior, and the authorization and audit policy for notification delivery.
+
+**Architecture review required before implementation.**
+

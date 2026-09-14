@@ -1,0 +1,76 @@
+● skill(agentic-architecture-router)
+
+● Read evidence-and-authority.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\e
+  │ vidence-and-authority.md
+  └ 87 lines read
+
+● Read quality-gates.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\q
+  │ uality-gates.md
+  └ 42 lines read
+
+● Read decision-framework.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\d
+  │ ecision-framework.md
+  └ 92 lines read
+
+● Read architecture-analysis-template.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\assets\archi
+  │ tecture-analysis-template.md
+  └ 41 lines read
+
+● Read counter-examples.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\c
+  │ ounter-examples.md
+  └ 74 lines read
+
+Interesting — this requirement matches counter-example 2 in the skill's own reference material almost verbatim. I'll produce the full analysis rather than reuse that as a shortcut.
+
+## 1. Requirement
+Classify a supplied free-text support request into one of the supplied categories, or return "unknown." The component returns a label only; it never assigns or contacts anyone. No complete rule table exists; the full request text and category definitions are supplied together at call time.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+|---|---|---|
+| None (no repository was inspected as part of this request) | Input = free-text request + supplied category definitions, delivered together; output = single label or "unknown"; no assignment/contact action; no complete rule table exists | Category set size/stability, request volume, latency/cost constraints, downstream consumer of the label, whether human review of low-confidence labels is required (*none of this is assumed*) |
+
+## 3. Responsibilities
+Atomic: this is a single responsibility — map one supplied (text, category-set) pair to one fixed-shape output (a label or "unknown"). It does not decompose usefully further; there is no separate scheduling, retrieval, or multi-step orchestration responsibility stated.
+
+## 4. Routing decision
+Routed to **bounded AI capability** — a single model call with fixed input (request text + category definitions) and fixed output shape (one label from the supplied set, or "unknown"). Deterministic code is insufficient because no complete rule table exists to make the mapping a lookup; nothing beyond a bounded classification call is warranted.
+
+## 5. Bounded-AI challenge record
+Question: could a single bounded call with a fixed input/output shape satisfy this responsibility? Answer: **yes**. The categories and text arrive together in one call; the component does not need to decide at run time what to examine next, fetch anything, or take a second step — it produces one label and stops. No agent is justified.
+
+## 6. Agent boundary justification
+N/A — zero agents proposed, so no boundary is required.
+
+## 7. Evidence classification
+- Request text: **rung 4 — documents** (unstructured, submitted text).
+- Category definitions: **rung 3 — organizational knowledge** (a supplied definitional/policy artifact).
+No agent memory (rung 6) or external capability (rung 7) is used. Retrieved/supplied knowledge here is evidence informing the classification, not authority over what the system must do.
+
+## 8. MCP boundary justification
+None proposed. The component takes text and definitions as direct input and returns a label; no standardized tool discovery across independent clients or other MCP-specific property is stated or needed. Existing direct call/API boundary is retained.
+
+## 9. Authority chain
+No consequential operation. The component performs no assignment, contact, or state change — output is a read-only label. If a future caller uses this label to assign or contact someone, that action would need its own authority chain (reasoning → authorization → authoritative service → execution → audit), and any authorization policy for it is currently **unknown — governance decision required**.
+
+## 10. Generic mechanism and product delegation
+Generic mechanism: a single bounded AI capability call (fixed input: request text + category definitions; fixed output: one label or "unknown"), wrapped by deterministic schema/output validation. No platform-specific skill was invoked in this session, so product/SDK mapping is not supplied here — delegate to `maf-architecture-mapping` or an installed platform skill if you want a concrete construct.
+
+## 11. Rejected alternatives
+- **All-deterministic**: insufficient — no complete rule table exists to make this a lookup.
+- **Bounded-AI-only**: sufficient — this is exactly what is chosen.
+- **Agent-everywhere**: would work mechanically but adds unjustified autonomy/cost for a one-shot, fixed-input classification.
+- **Multi-agent**: no distinct security/context/deployment/ownership/model/specialisation boundary exists to justify a second agent.
+- **Workflow-only**: insufficient alone — a fixed orchestration layer cannot supply the missing semantic classification, though it could trivially wrap the bounded call if one is needed later.
+
+## 12. Decisions, trade-offs, assumptions, open questions
+Decision: bounded AI capability, no agent, no MCP boundary, no consequential-action authority chain needed. Trade-off: accepting model-call latency/cost per request in exchange for handling free-text semantics no rule table covers. Assumptions: none beyond what's stated (all content above is either fact from the requirement or explicitly labelled as unknown). Open questions: how "unknown" is defined/thresholded, category-set update frequency, and whether any downstream consumer will treat the label as authorization for a consequential action (out of scope here, but flagged for governance if that changes).
+
+**Architecture review required before implementation.**
+

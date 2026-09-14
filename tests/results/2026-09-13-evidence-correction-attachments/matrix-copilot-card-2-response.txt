@@ -1,0 +1,15 @@
+● List directory .
+  └ 1 file found
+
+● Read prompt.txt
+  └ 1 line read
+
+Decision card:
+- Trigger: every 5 minutes
+- Check: compare the supplied queue length against the configured threshold
+- Condition: if queue_length > threshold, trigger the alert
+- Action: send exactly one alert through the already-configured notification service/destination
+- Otherwise: take no action
+
+This is a single-threshold alert rule: notify once per cycle when the queue exceeds the configured limit.
+

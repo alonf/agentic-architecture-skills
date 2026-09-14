@@ -1,0 +1,57 @@
+**Answer: No. This should not be an agent.** It routes to a bounded AI capability, a single fixed-input, fixed-output model call, wrapped in deterministic validation. The request matches the skill's own classification counter-example almost word for word.
+
+**1. Requirement.** Given one free-text support request plus the category definitions, return exactly one label from the supplied set, or `unknown`. No assignment, no contact, no side effects.
+
+**2. Fact table.**
+
+| Known from repository material | Known from the requirement | Unknown, not assumed |
+| --- | --- | --- |
+| Working directory holds only the prompt text itself; no code, config, or data | Input is free text plus supplied category definitions, delivered together | The actual category set, its size, and how often it changes |
+| No git repository, no platform code present | Output is one label or `unknown` | Whether any downstream system acts on the label |
+| | No complete rule table exists | Whether a confidence threshold for `unknown` is wanted |
+| | Read-only: do not assign or contact anyone | Volume, latency, and cost constraints |
+
+**3. Responsibilities.** Two, with the semantic one being atomic.
+
+- **R1, semantic classification.** Map the text to one of the supplied categories or `unknown`. This cannot be usefully decomposed further.
+- **R2, output validation.** Check the returned label is a member of the supplied set and coerce anything else to `unknown`.
+
+**4. Routing decisions.**
+
+- **R1 routes to bounded AI capability.** Deterministic code is rejected because no complete rule table exists, so a fixed rule cannot supply the semantic judgement. A single model call with a fixed prompt shape and a fixed output schema satisfies the responsibility fully. Nothing the model finds changes what step comes next.
+- **R2 routes to deterministic code.** Set membership is a fixed rule. A model must not be trusted to police its own output shape.
+- **Workflow axis.** One call followed by one validation. No sequencing, retries beyond ordinary transport retry, or state to hold. No workflow engine is needed.
+
+**5. Bounded-AI challenge record.** Could a single bounded call with a fixed input and output shape satisfy R1? Yes. The text and the category definitions arrive together, so the model has everything it needs in one shot. There is no lookup to decide on, no follow-up tool to choose, and no intermediate finding that alters the path. The challenge passes, so no agent is permitted.
+
+**6. Agent boundary justification.** Not applicable. Zero agents are proposed.
+
+**7. Evidence classification.**
+
+- Requirement text in the prompt and in the working directory file: Documents, rung 4.
+- The skill's classification counter-example: Organizational knowledge, rung 3. Retrieved knowledge is evidence about the pattern, not authority over what this system must do.
+- The support text and category definitions themselves: not observed, proposed sources.
+- Agent memory: not used.
+
+**8. MCP boundary justification.** None proposed. The requirement invokes no external capability and states no MCP-specific property such as cross-client tool discovery.
+
+**9. Authority chain.** No consequential operation. The output is a proposed label only. If a later system assigns tickets or notifies people from that label, that action needs its own deterministic control boundary with an authorization policy that is currently unknown, governance decision required. The label alone is not authority to act.
+
+**10. Generic mechanism and product delegation.** Mechanism: one bounded model call taking the text and category definitions, constrained to a closed output schema of the supplied labels plus `unknown`, followed by deterministic membership validation. Product mapping is delegated to the installed maf-architecture-mapping skill if you want this expressed in .NET Agent Framework constructs. No product is named here.
+
+**11. Rejected alternatives.**
+
+- **All-deterministic:** insufficient, because without a rule table there is no fixed rule that can classify free text semantically.
+- **Bounded-AI-only:** sufficient for R1, and it is the chosen routing, with R2 added as a deterministic guard rather than as a second model call.
+- **Agent-everywhere:** could produce the label but grants tool choice and multi-step authority that nothing in the requirement uses, adding cost, latency, and unpredictability for no gain.
+- **Multi-agent:** no distinct security, context, deployment, ownership, model, or specialisation boundary exists, so a second agent has nothing to own.
+- **Workflow-only:** an orchestration layer with fixed rules cannot supply the semantic judgement, though a trivial workflow could host the bounded call if you already run one.
+
+**12. Decisions, trade-offs, assumptions, open questions.**
+
+- **Decision:** bounded AI capability for classification, deterministic code for validation, no agent, no MCP surface, no workflow engine.
+- **Trade-off accepted:** classification is probabilistic. The `unknown` fallback and the membership check bound the failure mode to a wrong-but-valid label, which is auditable and correctable.
+- **Assumption, labelled:** the category definitions fit inside a single prompt. If the set grows past that, the mechanism is still bounded, only the prompt construction changes.
+- **Open questions:** what consumes the label and under what policy; whether a confidence signal should drive `unknown`; whether an evaluation set exists to measure label accuracy before rollout.
+
+**Architecture review required before implementation.**

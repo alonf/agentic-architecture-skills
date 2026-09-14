@@ -1,0 +1,108 @@
+● skill(agentic-architecture-router)
+
+I’m establishing the existing payment architecture and the decision boundaries before selecting an implementation mechanism.
+
+✗ Read quality-gates.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\q
+  │ uality-gates.md
+  └ Permission denied and could not request permission from user
+
+✗ Read evidence-and-authority.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\e
+  │ vidence-and-authority.md
+  └ Permission denied and could not request permission from user
+
+✗ Read decision-framework.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\d
+  │ ecision-framework.md
+  └ Permission denied and could not request permission from user
+
+✗ Read architecture-analysis-template.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\assets\archi
+  │ tecture-analysis-template.md
+  └ Permission denied and could not request permission from user
+
+● List workspace files (shell)
+  │ Get-ChildItem -Force | Select-Object Mode,Length,Name | Format-Table -AutoSize
+  └ 4 lines…
+
+● Read seed.txt
+  └ 1 line read
+
+## Architecture analysis
+
+**1. Facts**
+
+| Source | Known facts | Unknown — not assumed |
+|---|---|---|
+| Requirement | A payment must be assessed for fraud. | Inputs, decision latency, acceptable false-positive/false-negative rates, and whether the result can decline or hold a payment. |
+| Repository inspection | The workspace contains only `seed.txt`; no application, payment service, model, tests, or deployment configuration is present. | Existing payment APIs, data stores, fraud rules, audit logging, identity controls, and operational ownership. |
+| Illustrative only | Useful signals may include amount, currency, merchant, device, customer history, location, velocity, and prior chargebacks. | That any such signals are available, lawful to use, accurate, or approved for this system. |
+
+**2. Responsibilities**
+
+1. Validate and normalize a payment-assessment request.
+2. Gather authorized, current fraud evidence and calculate a risk score.
+3. Produce an explainable fraud recommendation with supporting evidence.
+4. Apply an authorized payment action and create an immutable audit record.
+
+This is not atomic: evidence collection, risk assessment, and payment execution have different correctness and authority requirements.
+
+**3. Least-autonomous routing**
+
+| Responsibility | Mechanism | Rationale |
+|---|---|---|
+| Request validation, schema enforcement, idempotency, and routing | Deterministic code | These are precise, repeatable controls. |
+| Feature extraction, scoring, thresholds, and reason codes | Deterministic rules and/or a trained bounded classifier | The output is constrained to a predefined risk score, reasons, and recommendation. |
+| Reviewing ambiguous free-text evidence, if it is later introduced | Bounded AI capability | It may summarize supplied evidence but must not invent facts, select tools freely, or execute payment actions. |
+| Payment approve/decline/hold | Authoritative payment/risk-policy service | A fraud assessor has no authority to execute a financial action. |
+
+**Bounded-AI challenge:** the stated task can be completed with a predefined input contract, authorized evidence sources, deterministic rules or a supervised fraud model, and a constrained output schema. Therefore, a free-running or tool-using agent is not justified. If the product label requires an “agent,” it should be a narrowly scoped **fraud-assessment agent** that only returns a recommendation; it must not possess action authority.
+
+**4. Evidence classification**
+
+- **Requirement evidence:** the requested payment-fraud assessment establishes the need for a risk decision.
+- **Repository-inspection evidence:** no implementation context exists in the supplied workspace.
+- **Illustrative/domain evidence:** sample signals and likely response fields are examples, not established system facts.
+- **Decision needed:** training data provenance, signal eligibility, retention, policy thresholds, fairness requirements, and model evaluation criteria require governance evidence before implementation.
+
+Agent memory is not authoritative evidence and must not determine fraud decisions. Retrieved knowledge is usable only when it comes from identified, authorized, versioned sources; its freshness, provenance, and access controls must be recorded with the assessment.
+
+**5. Capability boundaries**
+
+Keep existing service boundaries intact; no repository evidence establishes an MCP boundary. If payment history, device intelligence, or case-management systems are later integrated, use their existing authenticated APIs behind an application-owned evidence adapter. An MCP boundary is justified only if a separately governed, reusable tool contract is required; it is not required for the described capability.
+
+**6. Authority chain**
+
+`evidence and scoring -> policy authorization -> authoritative payment/risk service -> approve/decline/hold execution -> immutable audit`
+
+The assessment capability may emit only a typed result such as:
+
+`{ riskScore, recommendation: allow|review|block, reasonCodes, evidenceReferences, policyVersion, modelVersion }`
+
+Who may authorize a block, review, or automatic decline is **unknown — governance decision required**. Human review must not be assumed, but policy must explicitly define escalation and override ownership before any consequential action is enabled.
+
+**7. Technology selection**
+
+The selected generic mechanism is a deterministic fraud-assessment workflow with a bounded scoring capability and a typed recommendation contract. Product/framework selection should follow only after the payment service, data availability, latency requirements, and governance controls are established.
+
+**8. Rejected alternatives**
+
+- **All-deterministic:** sufficient initially when approved features and policy rules exist; may be augmented by a trained classifier if measured fraud performance requires it.
+- **Bounded-AI-only:** insufficient as the sole mechanism because payment decisions require authoritative, reproducible controls and calibrated risk evaluation.
+- **Agent-everywhere:** insufficient and unsafe because unconstrained tool selection and action authority add risk without satisfying a stated need.
+- **Multi-agent:** insufficient because there is no independent delegation or negotiation problem.
+- **Workflow-only:** insufficient alone because the workflow still needs a scoring/risk-evaluation capability.
+
+**9. Decision and trade-off**
+
+Implement a non-autonomous fraud-assessment component, optionally presented as an agent, with fixed inputs, authorized evidence retrieval, constrained outputs, explainable reason codes, and no ability to act on payments. This favors auditability, predictable latency, and controlled financial authority over open-ended reasoning.
+
+**Architecture review required before implementation.**
+
+
+
+Changes    +0 -0
+AI Credits 5.64 (32s)
+Tokens     ↑ 74.1k (54.9k cached, 19.2k written) • ↓ 1.8k (410 reasoning)
+Resume     copilot --resume=addb4370-eb87-44da-a24a-51eb4495cf3d

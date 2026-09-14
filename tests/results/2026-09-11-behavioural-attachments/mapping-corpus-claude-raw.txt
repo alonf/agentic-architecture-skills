@@ -1,0 +1,1096 @@
+=== P1 : The architecture decision is: bounded AI capability for invoice extraction. How do I build this with Agent Framework in C#? ===
+## Mapping: Bounded AI capability → invoice extraction
+
+**Responsibility**: extract structured fields from an invoice (fixed shape — vendor, date, line items, totals, etc.) using AI, where the routing decision already established this does *not* need the mechanism itself to decide what to examine next.
+
+**Construct**: per `construct-map.md`'s explicit "not an agent" outcome — *"Bounded AI → a direct model call, not an agent."* That means:
+
+- A direct, structured-output model call — the chat-client-shaped surface (`maf-surface.md` names `Microsoft.Extensions.AI`'s `IChatClient` with typed/structured output as the current candidate, **unconfirmed — verify against live docs before citing a namespace or package version**).
+- **No** `AIAgent`, **no** `AgentThread`/session construct, **no** agent loop, **no** hosted agent runtime.
+- One call in, one typed result out. If the extraction needs multiple back-and-forth steps to decide *what to check next* (e.g., "this line looks ambiguous, let me re-read the header region"), that's evidence the bounded-AI challenge has already failed and this should route to row 1 (`AIAgent`) instead — see the drift check below.
+
+Practically: define your invoice schema as a plain C# type (or JSON schema), call the chat client once with the invoice content and a request for that structured shape, deserialize the result. No tool-approval surface, no thread state, no workflow graph — none of rows 1–12 in `construct-map.md` are needed to support a single fixed-shape call.
+
+**Runtime/control placement** (`runtime-and-control.md`):
+- **Hosting placement**: in-process with the caller is the natural fit — a bounded call has no session lifecycle or isolation need that would justify a separately hosted agent runtime.
+- **Human authority**: if a downstream step acts on the extracted data (e.g., auto-pays the invoice), that authorization is a *separate* concern from this construct — route it to whichever of the three authority layers matches its granularity (per-call approval vs. workflow gate vs. delegated-access consent), not bolted onto the extraction call itself.
+- Rows 2–6 (ingress contract, protocol negotiation, isolation, estate control) don't apply here — those govern hosted-agent placement, and this construct is explicitly not a hosted agent.
+
+**Assurance** (`assurance.md`):
+- **Observe**: capture the raw model input/output independent of any caller narration, so a malformed or hallucinated extraction is visible in evidence, not just in a downstream failure.
+- **Evaluate**: check against the actual requirement — did the extracted fields match the source invoice — not "did the JSON parse."
+- **Verify behaviour** — this is the one worth watching for invoice extraction specifically: if you later find yourself adding retry-with-different-prompt loops, conditional re-reads, or "try another region of the document" logic around this call, that's the routed-to-bounded-AI-but-needs-to-decide-what-to-check-next drift `assurance.md` calls out. That's a signal to re-route to `AIAgent` (row 1), not to bolt a loop onto the direct call.
+- **Regress**: re-run the check after prompt/schema changes — a structured-output contract silently breaking on a new invoice layout is exactly the kind of change this is meant to catch.
+
+**Open questions to resolve before writing code**:
+1. Confirm `IChatClient` (or its current equivalent) and its structured-output mechanism against live `Microsoft.Extensions.AI` docs — not verified against a running deployment this session (`maf-surface.md`).
+2. Confirm current GA/preview status of whatever structured-output surface you land on, and if preview, record the risk + a version/commit pinning strategy explicitly in your design.
+
+**Architecture review required before implementation** — this mapping presumes the "bounded AI" routing decision itself was already made by `agentic-architecture-router`; if that decision hasn't actually been reviewed yet, that's worth confirming before building against this mapping.
+
+=== P2 : Approved decision: deterministic code for a scheduled threshold alert. Map this to Microsoft Agent Framework constructs in .NET and say plainly if there is no construct. ===
+## Mapping: scheduled threshold alert (deterministic)
+
+**Responsibility:** on a schedule, read a value, compare it to a fixed threshold, fire an alert if crossed. No step here varies based on reasoning over intermediate findings — it's a fixed comparison and a fixed action.
+
+**Construct:** **No MAF construct.** This is the router's "deterministic → no MAF construct" outcome named explicitly in `construct-map.md`: plain code, no agent, no thread, no tool-approval surface. Reaching for `AIAgent`, `AgentThread`, an MCP tool surface, or a `Workflows` graph here would invert the router's own principle (least autonomy that satisfies the requirement) rather than honor the approved decision.
+
+What this actually is: a scheduled trigger (e.g., a timer-triggered Azure Function, a `BackgroundService`/`IHostedService` with a timer, a Container App Job on a cron schedule, or a Kubernetes CronJob) that runs a comparison and calls a fixed alert sink (webhook, email, Teams message, etc.). Ordinary .NET, no Agent Framework package involved.
+
+**Runtime / control placement:** Still an ordinary hosting decision, just not an *agent*-hosting decision — the seven rows in `runtime-and-control.md` (isolation, session lifecycle, identity propagation, the three human-authority layers) are agent-runtime concerns and don't apply here: there's no session to isolate, no agent identity to propagate, and no tool call needing per-call approval or a workflow gate. Whatever identity the job runs under (managed identity, connection string) is a plain service-identity concern, not delegated-access consent.
+
+**Assurance:** The observe/evaluate/regress concerns from `assurance.md` still apply, just in their ordinary non-agentic form, not the routed-agent version:
+- **Observe** — log the value read, the threshold, and the fire/no-fire decision each run (not an agent's self-narration — there is no agent to narrate).
+- **Evaluate** — standard tests at and around the boundary (threshold exactly met, just under, just over).
+- **Verify behaviour** — not applicable in the agentic sense (no autonomy to drift), but worth a periodic sanity check that the responsibility hasn't grown a "decide what to check next" requirement that would actually justify revisiting the routing decision.
+- **Regress** — normal regression tests on the comparison/alert logic when it changes.
+
+**Dated facts / open questions:** none — since no MAF construct is used, nothing here depends on `maf-surface.md`'s versioned claims. If a later requirement change makes the check's *next step* vary based on findings (rather than a fixed comparison), that's the point to re-run the router, not to retrofit an agent construct onto this code.
+
+=== P3 : The routing decision is already made: single agent for a diagnostic responsibility where intermediate findings decide what to inspect next. Which MAF construct owns this responsibility? ===
+This maps directly to **row 1** of the construct map: `AIAgent`.
+
+**Responsibility → construct:** A single agent that decides at run time what to check next → `AIAgent` (e.g. hosted via `AIProjectClient.AsAIAgent`, with a C# method bound as its tool).
+
+**Why this construct, not something else:** This is axis-1 tier 3 in the router's model — the mechanism itself must decide, from its own intermediate findings, what to examine next. That's precisely what distinguishes it from a bounded AI call (fixed shape, no branching on its own output) and from a deterministic `Workflows` graph (fixed step sequence known in advance). The diagnostic loop — inspect, interpret, decide next step, repeat — is the agentic tool-calling loop itself, which is what `AIAgent` owns. Since the routing decision was already "single agent" (not multi-agent), there's no agent-as-tool (row 10) or A2A delegation (row 11) involved — this is one agent's own reasoning loop.
+
+**Adjacent constructs worth noting, since diagnostics often need them too:**
+- If it needs turn-to-turn continuity while gathering findings within one investigation: `AgentThread` (row 2) — naming unsure, verify against current docs.
+- If it needs to cite external evidence (logs, docs, telemetry) rather than rely on memorized knowledge: `AIContextProvider` backed by a search source (row 3).
+- If any specific diagnostic action is consequential (e.g., a remediation call, not just inspection) it needs sign-off: `ApprovalRequiredAIFunction` (row 9) — that's a separate responsibility from the diagnostic loop itself, so don't conflate them.
+
+One open question worth flagging per step 6: confirm current SDK naming for the session/thread construct (`AgentThread` vs `AgentSession`) against live docs before citing it in a design doc or code.
+
+=== P4 : We already approved a fixed step sequence with one human authorization boundary. Where does the human approval go in Agent Framework? ===
+This maps directly to row 8 of the construct map.
+
+**Responsibility → construct**
+
+| Responsibility | MAF construct | Why |
+|---|---|---|
+| Fixed step sequence with one authorization boundary | `Microsoft.Agents.AI.Workflows` graph with a human gate at that step | Sequencing is deterministic, so the workflow graph owns control flow — not an agent deciding what's next. The human approval is a **gate on the graph transition** at the one step you designated, not something threaded through an agent's reasoning loop. |
+
+**Where exactly it goes:** the gate sits on the edge/transition *into* (or out of) the specific step you already scoped as the authorization boundary — the workflow pauses there, surfaces the pending state for human sign-off, and only advances to the next step once approved. Everything before and after that boundary stays plain deterministic sequencing; the gate doesn't spread to other steps.
+
+**Don't confuse this with the other two human-authority layers** (`runtime-and-control.md` row 7) — pick based on granularity:
+- Row 8 (**workflow gate**, what you want) — approval on a *stage transition* in a fixed sequence.
+- Row 9 (`ApprovalRequiredAIFunction`) — approval on a *single tool/function call*, not a graph transition. Wrong fit if your boundary is "before step 4 runs," right fit if it's "before this one function executes."
+- Delegated-access consent (`runtime-and-control.md` #6) — for acting *as* the calling user against a downstream system; not an approval-of-an-action mechanism at all.
+
+Since you said "one human authorization boundary" at a specific point in the sequence, that's the workflow-graph gate (row 8), not the per-function approval.
+
+**Open item to verify before coding:** the exact current API for declaring a human-gate node/edge in `Microsoft.Agents.AI.Workflows` isn't asserted here — this skill's surface file doesn't carry that signature, so confirm the construct name and gate-declaration syntax against live Agent Framework docs/samples before writing code.
+
+=== P5 : Approved mechanism: conversational continuity across turns within one interaction only. Session, memory or knowledge — which one is this? ===
+Row 2 answers this directly.
+
+**Responsibility:** Conversational continuity across turns, within one interaction only.
+
+**Construct:** `AgentThread` — *(unsure: some current material names the persisted-session wrapper `AgentSession` instead; verify current SDK naming against live docs before citing either in code)*.
+
+**Why this one, not memory or knowledge:**
+- Not **memory** (row 4, a custom `AIContextProvider` recalling prior outcomes) — memory is recall *across sessions*, of the agent's own past findings, surfaced as a re-verifiable hypothesis. Your mechanism is explicitly scoped to *one interaction*, so it doesn't need to survive the interaction ending.
+- Not **knowledge** (row 3, `AIContextProvider` + `TextSearchProvider`, or row 5, `AgentSkillsProvider`) — knowledge is either an external evidence corpus to cite, or procedural knowledge loaded on demand. Turn-to-turn state isn't either of those; it's the running conversational state itself.
+- It's **session/thread** state: the narrower property is "must not outlive this interaction, must not be conflated with cross-session recall."
+
+Per step 3 (runtime-and-control), this is a runtime/session-lifecycle concern, not a hosting decision — worth noting if you're about to place this in a hosted-runtime context, but it doesn't change the construct choice above.
+
+**Open question to carry forward (step 6):** the naming split between `AgentThread` and `AgentSession` in current MAF material is unresolved here — confirm against live framework docs/samples before it goes into code or a design doc.
+
+=== P6 : The router already decided the agent must cite an external evidence corpus rather than memorize it. Which MAF construct owns this responsibility? ===
+## Mapping
+
+**Responsibility:** Read access to an external evidence corpus the agent must cite, not memorize (router already resolved this as a retrieval/citation requirement, not parametric recall).
+
+**Construct:** `AIContextProvider`, backed by a search source (e.g. `TextSearchProvider`) — construct-map.md row 3.
+
+**Architectural property that justifies it:** Retrieval is a context-injection concern, kept separate from the agent's own reasoning loop, so retrieved content stays attributable and citable rather than being absorbed as if the agent already knew it. That's the load-bearing distinction from row 4 (a custom `AIContextProvider` recalling the agent's *own* prior findings) — same construct family, different origin: external corpus vs. agent's own history. Since the latter is fallible self-report, it must be surfaced as a re-verifiable hypothesis, not fact — the external-corpus case doesn't carry that caveat.
+
+**Runtime/control placement:** This is a context-provider concern layered onto whatever `AIAgent`/`AgentThread` is already running the conversation — it doesn't change hosting or control-plane placement on its own; it just determines what gets injected into context before the agent reasons.
+
+**Assurance concerns that apply:**
+- *Observe* — capture what was actually retrieved and cited (source ids, passages), independent of the agent's own narration of "what it looked up."
+- *Evaluate* — check citations trace back to the corpus, not that the answer merely "sounds sourced."
+- *Verify behaviour* — confirm the agent is citing, not silently reverting to parametric memory when retrieval is thin or absent.
+
+**Open/dated items (see `maf-surface.md`):** the exact `AIContextProvider`/`TextSearchProvider` class names and package are not asserted here — confirm against live Microsoft Agent Framework docs before writing code. No preview-status claim is made for this construct in the source material; verify current GA/preview status before shipping.
+
+=== P7 : Approved decision: recall the agent's own prior findings across sessions as a hypothesis to re-check. Session, memory or knowledge — which one is this? ===
+## Mapping: recall of the agent's own prior findings across sessions
+
+**Answer: memory** — specifically, a custom `AIContextProvider` that recalls prior outcomes. This is construct-map row 4.
+
+**Responsibility → construct**
+Recall of the agent's own prior findings across sessions maps to a custom `AIContextProvider` that recalls prior outcomes — not `AgentThread`/session (row 2), and not the `TextSearchProvider`-backed `AIContextProvider` used for external knowledge (row 3).
+
+**Why session and knowledge don't fit**
+- **Session** (`AgentThread`) is conversational state persisting across *turns within one interaction* — it must not survive the interaction ending, so it can't be the mechanism for cross-session recall.
+- **Knowledge** (row 3, `AIContextProvider` backed by a search source) is read access to an *external* evidence corpus the agent must cite, not memorize. Its defining property is origin: content comes from outside the agent.
+- **Memory** (row 4) is distinguished from knowledge by origin, not mechanism shape: the content originates from the *agent's own history*, and — this is the load-bearing part for your case — it must be surfaced as a **hypothesis to re-verify**, not an asserted fact, because memory is fallible in a way fresh evidence isn't. That "re-check" framing in your decision is exactly what row 4 exists for.
+
+**Runtime/control placement**
+This is a context-injection concern independent of hosting choice — it plugs into the agent's context pipeline the same way regardless of whether the agent runs in-process or in a hosted runtime. No isolation, lifecycle, or identity-propagation property is implicated unless the memory store itself crosses a session-isolation boundary (runtime-and-control row 4) — worth checking if prior findings are stored per-user vs. shared.
+
+**Assurance concern that applies**
+This is where "Verify behaviour" (assurance.md) matters most: since recalled findings are a hypothesis, not a fact, the agent's use of them must be observable and evaluable separately from fresh evidence — if the agent ends up treating recalled memory as settled fact rather than re-checking it, the implementation has quietly dropped the property the routing decision required.
+
+**Open/dated items** — no version or class name is asserted here per the skill's currency rule; `AIContextProvider` naming should be verified against live MAF docs (`maf-surface.md`) before writing code.
+
+=== P8 : The architecture decision is already approved: load procedural guidance only when relevant, not in permanent context. How do I build this with Agent Framework in C#? ===
+This maps to a single row in the construct map — no multi-construct composition needed.
+
+## Mapping
+
+**Responsibility:** procedural guidance loaded only when relevant, not held in context permanently.
+
+**Construct:** `AgentSkillsProvider`, backed by one or more `SKILL.md` files — construct-map.md row 5.
+
+**Why this construct and not another:** the defining property is *progressive disclosure* — the guidance must cost zero context when its responsibility isn't in play for the current turn, and it must stay declarative content the provider injects, never code the agent executes directly. That rules out:
+- putting it in the system prompt (permanent context — violates the approved decision directly),
+- a plain `AIContextProvider`/`TextSearchProvider` (row 3) — that's for an external evidence corpus the agent cites, not procedural how-to content the agent follows,
+- a custom memory-recall provider (row 4) — that's the agent's own prior findings, a different origin than authored procedural guidance.
+
+## Wiring, at concept level
+
+`AgentSkillsProvider` is registered on the `AIAgent` at construction time, the same way any context provider is composed into the agent's context-assembly step. Each `SKILL.md` stays a standalone declarative file (name, description, trigger conditions, body) — the provider is what inspects the current request and decides whether a given skill's content gets pulled into context for that turn, not the agent's own reasoning loop.
+
+One sub-decision this doesn't resolve on its own: *how* the provider judges "relevant." If that judgment is a deterministic match (frontmatter keywords, path/tool-name triggers) it's plain code inside the provider; if it needs semantic judgment beyond keyword matching, that's itself a mechanism decision (bounded AI selection call vs. something requiring its own agent loop) that construct-map.md doesn't specify — worth a quick pass back through `agentic-architecture-router` only if your provider's matching logic turns out to need more than deterministic triggers.
+
+## Runtime and control placement
+
+Hosting placement isn't a separate decision here — the provider runs wherever the `AIAgent` itself runs (in-process or hosted runtime); it's part of context assembly at invoke time, not an independently hosted component. It doesn't touch isolation, lifecycle, estate control, or the three human-authority layers (runtime-and-control.md rows 4–7) — there's no approval boundary in loading declarative guidance. If a *specific skill's procedure* later includes a step that itself needs sign-off, that's a separate row-8/row-9 decision layered on top, not part of this mapping.
+
+## Assurance
+
+- **Observe:** capture which skill(s) were considered and which were actually injected per turn, independent of the agent's own narration of "I followed skill X."
+- **Evaluate:** did the right skill load when the trigger condition was met, and — the harder direction — did it stay absent on unrelated turns? Progressive disclosure is falsifiable both ways.
+- **Verify behaviour:** watch for the provider's relevance check quietly growing more autonomous than the trigger logic you actually built (e.g., a keyword match slowly turning into an implicit model judgment call nobody routed).
+- **Regress:** re-check after adding new `SKILL.md` files that they don't get injected for requests they shouldn't match, and that existing triggers didn't shift.
+
+## Open items to verify live before coding
+
+`AgentSkillsProvider` and `SKILL.md` are named directly in construct-map.md without an "unsure" flag, but neither construct-map.md nor maf-surface.md carries a namespace, package version, or GA/preview status for it — maf-surface.md's checked-facts list doesn't cover this construct at all. Before writing code: confirm the current namespace/package, its GA-vs-preview status, and the exact provider-registration point against live Microsoft Agent Framework documentation or the framework's own .NET samples — don't carry a signature forward from this mapping.
+
+=== P9 : We already decided this capability is owned by another team and should be discovered across a real ownership boundary. Do I need an MCP client or an MCP server here? ===
+You need an **MCP client**, not a server — this is construct-map row 6: "A tool surface owned by another service or team" → `McpClient` discovery against an MCP server.
+
+- **Construct**: Your agent hosts an `McpClient` that discovers the other team's tool contract at runtime. You don't hardcode their tool signatures — you don't own that contract, and it must not be assumed stable across the boundary.
+- **They own the server**: The other team is the one who exposes an MCP server over their capability. That's their side of the boundary, not yours — you're not building a server here unless *your* capability is what's being exposed to consumers on the other side of some other boundary.
+- **Runtime/control** (runtime-and-control.md): their MCP server's ingress is the contract you bind to; protocol negotiation (wire binding, version) isn't implied just because both sides "support MCP" — verify it. Isolation and lifecycle of their server are their concern, not yours.
+- **Assurance**: since the boundary is real, periodically re-verify the discovered contract still matches what you're calling against — a stale assumption here is exactly the failure mode row 6 exists to prevent.
+
+One flag: if what you actually need is a peer to hand off an open-ended task to (rather than call a bounded tool), that's row 11 (A2A agent-card delegation), not MCP client/server at all. Worth confirming which shape this is before implementing — is the other team's capability a discrete tool call, or does it need a task description handed off?
+
+=== P10 : Approved decision: a tool call must pause mid-call for a human answer, then resume. Map that to MAF constructs in .NET. ===
+## Mapping: "tool call pauses mid-call for a human answer, then resumes"
+
+**Responsibility.** A tool invocation, already in progress, needs to stop, ask a human a question, and continue using their answer — not a yes/no gate on whether to run at all.
+
+**Construct (step 2).** This is construct-map row 7: **MCP elicitation**. The pause-and-resume contract lives at the protocol layer, not in the agent's own control flow — the agent doesn't need bespoke wait-for-UI logic; the tool call suspends, the elicitation round-trips a question/answer, and execution resumes with the answer folded in.
+
+Don't conflate this with row 9, **`ApprovalRequiredAIFunction`** — that's a *sign-off gate before a call runs* (per-call authorization), not a mid-call request for an answer. If what you actually need is "should this run at all," that's row 9, not row 7. Your phrasing ("pause mid-call for a human **answer**") matches row 7; flag it if the real need is closer to a yes/no gate.
+
+**Runtime and control placement (step 3).**
+- **Ingress**: elicitation only works end-to-end if the calling agent's host/MCP client actually supports the elicitation round trip — this is a client-capability question, not just a server one.
+- **Runtime control (lifecycle)**: the tool call is suspended while waiting on the human, so whatever session/thread holds that state is bound by the *hosting layer's* idle/reclaim policy, not the agent's. A human who takes longer to answer than the host's idle timeout will cause a reclaimed session mid-wait — this is an architectural constraint to check, not an assumption.
+- **Human authority layer**: runtime-and-control.md's three named authority mechanisms are the workflow gate (row 8), per-call approval (row 9), and delegated-access consent. Mid-call elicitation is a fourth, distinct human-touch point — it's not authorization at all, it's information — so don't route it through any of those three; row 7 stands on its own.
+
+**Assurance (step 4).**
+- *Observe*: capture the elicitation question, the human's actual answer, and how the tool call used it — as independent execution evidence, not the agent's self-report of "I asked and got confirmation."
+- *Evaluate*: check that the tool call's post-resume behavior actually incorporated the answer correctly, against the specific requirement this pause was routed for.
+- *Verify behaviour*: watch for drift — a call that always proceeds with a canned/default answer never really needed elicitation (over-routed); a call whose "pause" is actually gating whether it runs at all has drifted toward row 9's semantics and should be re-routed, not left as elicitation.
+- *Regress*: re-test the suspend/resume path whenever the tool's argument schema or downstream logic changes — a pause-and-resume contract is exactly the kind of thing a later change silently breaks without anyone noticing until a human is left waiting on a dead session.
+
+**Open questions / dated facts (steps 5–6) — verify before building or citing in code:**
+- The current MCP client/elicitation API surface's exact name and signature is explicitly unconfirmed in this material (`maf-surface.md`) — don't copy a class name from a prior write-up; check the live MCP C# SDK and MAF docs.
+- Whether the suspended session survives long enough for a real human response time, and under what isolation/idle-reclaim policy, is not independently verified here — the only dated isolation/lifecycle findings (`maf-surface.md`, checked 2026-09-04/05) don't specifically cover an outstanding elicitation; re-verify against current docs rather than assuming it holds.
+- If live documentation marks MCP elicitation (or the hosting runtime's suspend/resume support) as preview rather than GA, record the risk and a version/commit pinning strategy explicitly before this ships — none is asserted here.
+
+=== P11 : The approved design is a specific consequential tool call that needs human sign-off before execution. Which MAF construct owns this responsibility? ===
+No open questions apply here — `maf-surface.md` doesn't mark `ApprovalRequiredAIFunction` as unconfirmed, and it's not preview-status per the material.
+
+## Mapping
+
+**Responsibility:** A specific, consequential tool call that needs human sign-off before it runs.
+
+**Construct:** `ApprovalRequiredAIFunction` (construct-map.md row 9).
+
+**Why this one and not the neighboring options:**
+- This is **per-call** authorization — the gate sits on one function invocation, not on a stage transition in a sequence. That rules out row 8 (`Microsoft.Agents.AI.Workflows` graph with a human gate), which is for a fixed step sequence with an authorization boundary at one specific *step*.
+- It's a **blocking approval before execution**, not a mid-call question the tool needs answered to keep going. That rules out row 7 (MCP elicitation), which is for a tool call that pauses for a human *answer* mid-call, not a yes/no gate on whether the call fires at all.
+
+**Runtime/control placement:** this is the tool layer of the three-layer human-authority split in `runtime-and-control.md` row 7 — workflow-level gate (row 8) vs. per-tool-call approval (row 9, this one) vs. delegated-access consent (identity propagation). Per-call sign-off is the finest-grained of the three; don't let a workflow gate substitute for it if the requirement is really "this one call needs a human to say yes."
+
+**Assurance concern that applies:** per `assurance.md`'s Observe concern, the approval request and its outcome (approved/denied, by whom) need to exist as independently captured execution evidence — not just inferred from the agent's own summary of what it did.
+
+**Open item:** exact current signature/namespace for `ApprovalRequiredAIFunction` isn't asserted here — verify it against live Microsoft Agent Framework docs before writing it into code (per the currency rule; `maf-surface.md` doesn't carry a dated confirmation for this specific type, so treat the name as needing a live check, not the SDK surface itself).
+
+=== P12 : Existing decision: consult a second agent as a bounded capability, not a peer delegation. Map this to Agent Framework constructs. ===
+## Mapping: "Consult a second agent as a bounded capability, not a peer delegation"
+
+**Responsibility → Construct (step 2, construct-map.md row 10)**
+
+| Responsibility | MAF construct | Why this row, not row 11 |
+|---|---|---|
+| A second agent consulted as a bounded capability | **A second agent exposed as a tool, called over MCP** (agent-as-tool) | The decision text explicitly names what it is *not*: row 11 (A2A agent-card discovery + task delegation to a peer) is for a peer agent owned elsewhere that receives a task description with no function signature to invoke. What you've described — a bounded capability the first agent *consults* — is the "as-tool" framing: the second agent is called through a fixed tool contract, not handed an open-ended task. This is only justified if the router's agent-boundary test found a real boundary (specialisation, model, ownership) between the two agents; if it didn't, the correct routing may be a single agent with more tools, not two agents at all — that's a router question, not one this skill re-derives. |
+
+Composes with row 6 (tool surface owned by another service/team → `McpClient` discovery against an MCP server): the second agent's tool contract is discovered, not hardcoded, since the calling agent doesn't own it.
+
+**Runtime and control (step 3)**
+
+1. **Hosting placement** — the second agent sits behind an MCP server boundary, which typically implies it runs in its own hosted runtime, separate from the calling agent's process. This is the isolation-boundary fork; confirm it's actually true for your deployment rather than assuming "exposed via MCP" always means separately hosted.
+2. **Ingress contract** — the calling agent's access to the second agent is the MCP tool-call surface, not the second agent's own primary request/response ingress. The calling agent never talks to the second agent's native ingress directly — only through the tool boundary.
+3. **Protocol negotiation/binding** — MCP client/server discovery and tool-schema negotiation, not agent-card/A2A binding (that's row 11's concern, not this one's).
+4. **Isolation** — whatever session isolation the second agent's own hosting runtime provides is orthogonal to the calling agent's session; nothing about "called as a tool" implies shared session state.
+5. **Runtime control (lifecycle)** — the second agent's start/idle/reclaim lifecycle is owned by its own hosting layer. The calling agent does not and should not assume it controls or can rely on the second agent's session persisting past a single tool call.
+6. **Estate control (identity propagation)** — if the second agent's work needs to be done *as* the original caller against a downstream system, that requires an explicit delegated-access consent step. A tool call crossing this boundary does not, by itself, carry a verifiable credential — only an identifier at most.
+7. **Human authority** — a bounded-capability tool consultation (row 10) doesn't by default imply any of the three authority layers. But ask explicitly: is this particular second-agent call consequential enough to need per-call sign-off? If yes, that's row 9 (`ApprovalRequiredAIFunction`) wrapping this specific tool call — a separate decision from the row 10 mapping itself, not a substitute for it.
+
+**Assurance (step 4)**
+
+- **Observe**: capture the actual tool call to the second agent — arguments passed, result returned — independent of the first agent's narration of "I consulted the other agent."
+- **Evaluate**: did the consultation produce the specific bounded output the requirement needed, not just "a response that looked reasonable."
+- **Verify behaviour** — this is the one most worth watching here: confirm the call *stays* a bounded, single-shot (or fixed-shape) tool invocation. If it drifts into a multi-turn, open-ended back-and-forth where the second agent starts making its own follow-up decisions about what to ask next, the implementation has quietly crossed into row 11 (peer delegation) territory without a routing decision saying so — re-route the decision, don't patch around it.
+- **Regress**: re-check this boundary after later changes. It's easy for a "just add one more parameter" change to the second agent's tool contract to gradually turn a bounded capability into something that behaves like delegation.
+
+**Dated facts / open questions (steps 5–6 — carried from maf-surface.md, not asserted here)**
+
+- The exact current MCP client/elicitation API surface name in MAF is **unconfirmed** — verify against live SDK docs before citing a namespace.
+- If the second agent runs on a hosted runtime with per-session sandbox isolation, that property was verified 2026-09-04/05 against one deployment, not a standing SLA — re-confirm against current product docs.
+- If either the MCP client construct or the second-agent hosting surface is preview-status in your current SDK version, state that explicitly in the design along with a pinning strategy (exact SDK commit/version) — don't let a preview label pass silently as GA.
+
+**Open question for you to resolve before this goes further**: did the router's agent-boundary test already confirm a real boundary (specialisation/model/ownership) justifying *two* agents here, or is that still assumed? This mapping presumes step 1 (the routing decision) already answered that — if it didn't, that's worth a pass through `agentic-architecture-router` before locking in the MCP tool-surface design.
+
+=== P13 : Existing decision: delegate a task to a peer agent owned elsewhere; the caller has a task and a result, not a function signature. Map this to A2A/agent-card constructs. ===
+This is exactly row 11 of the construct map. Here's the mapping.
+
+## Responsibility
+Delegate an open-ended task to a peer agent owned and deployed elsewhere. The caller holds a task description and expects a result — not a function signature it can invoke directly.
+
+## Construct
+**Agent-card discovery + task delegation (A2A protocol).**
+
+This is distinct from row 10 (agent-as-tool over MCP): a tool consultation implies a bounded capability the caller treats as a function it calls; A2A delegation implies a real ownership/deployment boundary where the caller hands off a task and gets back an eventual result, with no shared function contract. The fact pattern you gave — "task and a result, not a function signature" — is the defining test for row 11, not row 10.
+
+Before this is delegation rather than a tool call, confirm the router's agent-boundary test actually holds: is this genuinely a different team/deployment owning the peer, or just a different internal module dressed up as a peer? If it's the latter, row 10 (agent-as-tool) is the honest mapping instead.
+
+## Runtime and control placement
+1. **Ingress contract** — A2A delegation layers on top of the peer's own hosted ingress; your caller must actually be able to reach that ingress. Delegation isn't an alternative to the peer's request/response contract, it rides on it.
+2. **Protocol negotiation and binding** — agent-card discovery exists precisely because two A2A-speaking agents may not share a wire binding (JSON-RPC vs. HTTP+JSON) or protocol version. Do discovery as its own step before assuming binding compatibility — don't treat "both support A2A" as sufficient.
+3. **Isolation / lifecycle / identity** — all owned by the peer's hosting layer, not by your caller. If your design needs the peer agent to act *as* your calling user against a downstream system, that requires an explicit delegated-access consent step — a propagated identity header is not itself that grant.
+4. **Human authority** — if this delegated task needs a sign-off, decide which of the three authority layers it belongs to (workflow gate / per-call approval / delegated-access consent) rather than treating "there's a human somewhere" as sufficient. Delegation to a peer doesn't by itself create any of these three; if one is needed, it has to be added deliberately, likely on your side of the boundary before the delegation call is made.
+
+## Assurance
+- **Observe**: capture the task sent and the result received as independent evidence — the peer agent's own narration of what it did is not sufficient, and you likely have no visibility into its internal execution at all (it's owned elsewhere).
+- **Evaluate**: check the returned result against what your requirement actually needed, not just "did a result come back."
+- **Verify behaviour**: watch for drift in either direction — if the peer's task is in practice always the same fixed call, delegation may be overkill (row 10 or a direct call would suffice); if your caller starts needing to inspect or steer the peer's intermediate steps, that's a sign the boundary was mis-modeled as delegation when it's actually tighter coupling.
+- **Regress**: since you don't own the peer, its behavior can change out from under you independent of your own releases — re-check periodically, not just after your own changes.
+
+## Open questions / dated facts (verify before building)
+- **A2A binding compatibility (JSON-RPC vs HTTP+JSON) between two hosted peers is explicitly unverified** in the source material (checked 2026-09-04) — confirm against current documentation before assuming your caller and the peer agent can actually talk once agent-cards are exchanged.
+- The exact current agent-card discovery API/class surface is not asserted anywhere in this skill's reference material — do not copy a class name forward from a prior design; confirm against live Agent Framework docs at implementation time.
+- If sign-off is needed for the delegated task, that mechanism is not part of the A2A construct itself and must be sourced from the three-layer authority model separately.
+
+**Architecture review required before implementation** — this mapping assumes the "peer agent, real ownership boundary" decision was already correct; if that boundary turns out to be internal rather than external, row 10 (agent-as-tool) is the correct remap, not this one.
+
+=== P14 : Hosting has already been decided separately: the agent runs in a hosted runtime for operational reasons, independent of the autonomy decision. How do I host this agent? ===
+To map hosting properly I first need the mechanism decision this is built on — this skill won't guess it (per its step 1 rule). A few things I need from you:
+
+1. **What does the agent do**, at a high level (single responsibility, or several)?
+2. **What construct was already decided** — single agent, multi-agent (agent-as-tool / handoff / group chat), or a workflow with a human-in-the-loop gate? (You mentioned an "autonomy decision" was made separately — what was it?)
+3. Any constraint already fixed about the hosted runtime itself (e.g., Azure Container Apps, AKS, Azure Functions, App Service) or is the runtime *type* still open and only "hosted, not local" is fixed?
+
+Once I have the construct(s), I can walk step 3 (runtime placement, ingress, protocol, isolation, control layers) properly instead of assuming a shape for "this agent."
+
+=== P15 : Approved decision: bounded AI for customer-sentiment scoring, no agent loop. Should this be an AIAgent or a function tool? ===
+Given the decision already made — bounded AI, no agent loop — the direct answer from `construct-map.md`'s "When the decision was not an agent" section is: **neither**. That section exists specifically to stop a mapping from defaulting to an agent construct just because the framework has one handy.
+
+**Responsibility → construct**
+Customer-sentiment scoring, bounded AI, no loop → a **direct, structured-output model call**, not `AIAgent` and not a function tool. `AIAgent` (construct-map row 1) is justified only when the mechanism must decide at runtime what to examine next from its own intermediate findings — i.e., the bounded-AI challenge already failed. That's the opposite of what "no agent loop" means here, so row 1 doesn't apply. A "function tool" (`AIFunction`) is a construct an *agent* calls as one of its own tools — it presupposes something else is orchestrating a tool-call loop. If nothing is orchestrating calls to this scorer, there's no caller to attach a tool to, so that framing doesn't apply either. The construct is the plain chat-client-shaped call: text in, typed sentiment result out, one round trip, no session.
+
+**Justifying property**: a fixed-shape call doesn't need the machinery rows 1–12 exist to support — no `AgentThread`, no tool-approval surface, no hosted agent runtime.
+
+**One branch worth checking with you**: if this scorer is meant to be *invoked by some other agent* as one of its callable capabilities (e.g., a claims-triage agent calls it to get a sentiment signal before deciding next steps), then wrapping it as a function tool is legitimate — but that's a statement about the *caller's* architecture, not this responsibility's. The scorer's own internals stay the same bounded, non-looping call either way.
+
+**Runtime/control**: in-process with the caller by default (no isolation boundary implied by a bounded call). No human-authority layer is needed unless the score itself triggers a consequential downstream action — if it does, that's a per-call approval question (row 9), not a reason to promote this to an agent.
+
+**Assurance**: log the input text and the structured score/model-version as independent evidence (there's no agent narration to fall back on). Evaluate against a labeled sentiment set, not "does it read reasonable." The one thing worth watching over time: if product later wants this to *also* decide which additional signals to pull before scoring, that's the signal this routing decision has been outgrown — re-route to row 1, don't extend it with more prompt logic and call it still-bounded.
+
+**Dated fact to re-verify**: `maf-surface.md` names `Microsoft.Extensions.AI`'s `IChatClient` as the current bounded-AI call surface, but flags it as unconfirmed this session — check its GA/preview status and namespace against live docs before writing it into code.
+
+=== N1 : Should this be an agent for support-ticket routing? ===
+# Architecture Analysis: Support-Ticket Routing
+
+## 1. Requirement
+Decide whether support-ticket routing — determining which team an incoming ticket should go to — should be implemented as an agent.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+|---|---|---|
+| None — working directory has no code, is not a git repository, contains no ticketing system integration | The system routes incoming support tickets; the question is whether routing should be agentic | The fixed set of destination teams/queues; whether input is free-text only or includes structured fields; confidence-threshold or human-review policy for ambiguous tickets; audit/logging requirements; the ticketing system in use; blast radius of a misrouted ticket |
+
+## 3. Responsibilities
+Two responsibilities, not genuinely atomic:
+1. **Classify** an incoming ticket to a destination team, given its content.
+2. **Apply** that classification — move/assign the ticket to the destination team's queue in the ticketing system.
+
+## 4. Routing decisions
+- **Classification → bounded AI capability.** A single call with fixed input (ticket content) and fixed output shape (one label from a known team set). Nothing about *how* the classification is produced needs to change based on an intermediate finding.
+- **Apply routing decision → deterministic code.** Once the label exists, moving the ticket to that queue is a fixed system action — a direct call against the ticketing system, no judgment involved.
+
+## 5. Bounded-AI challenge record
+Responsibility 1 — the only candidate for agent status: *"Could a single bounded call with a fixed input/output shape satisfy this?"* **Answer: yes.** Routing a ticket never requires deciding, at run time, what to examine next, in what order, or whether another step is needed — the destination set is fixed and the input is the ticket itself. An agent is therefore not justified here; this is the same shape as the classic "classify a ticket" case, where the requirement's own wording ("agent") does not survive the challenge. Responsibility 2 never reaches this question — it has no natural-language judgment at all.
+
+## 6. Agent boundary justification
+n/a — zero agents proposed.
+
+## 7. Evidence classification
+- Ticket free-text body, if used as classifier input — **rung 4, documents**.
+- Ticket structured fields (submitter, product area, priority), if present — **rung 2, structured application data**.
+- Destination team list / routing policy — **rung 3, organizational knowledge**.
+- No rung 6 (agent memory) evidence is used — the classification call is stateless, so the agent-memory caveat does not apply here.
+- Wherever the team list or any routing policy is retrieved to ground the classifier's label set, that retrieved knowledge is evidence about the system, not authority over what it must do.
+
+## 8. MCP boundary justification
+None proposed. Both the classification call and the ticket-assignment action can run against the ticketing system's existing API/service boundary; no concrete property (cross-host dynamic tool discovery, a specific isolation guarantee) has been named that only an MCP boundary would provide.
+
+## 9. Authority chain
+Assigning a ticket to a team is a mutation with a real (if usually reversible) consequence — it starts SLA clocks and directs work. Chain:
+- **reasoning**: bounded AI call produces a label (and ideally a confidence score)
+- **authorization/policy**: *unknown — governance decision required* — no confidence threshold or human-review policy for low-confidence classifications has been specified
+- **authoritative service**: the ticketing system, as system of record for ticket assignment
+- **execution**: deterministic code calling that system's assignment/move operation
+- **audit**: the ticketing system's own history log records the assignment change (rung 2); whether classifier confidence/rationale is captured for audit is unspecified
+
+## 10. Generic mechanism and product delegation
+Mechanism, stated generically: a single structured-output classification call (fixed label set) followed by a deterministic API call to the ticketing system, sequenced by ordinary code or a lightweight workflow step — not an agent. No platform skill is being invoked to map this onto a specific SDK or hosting construct, since no agent was selected; if implementation proceeds in .NET with Microsoft Agent Framework regardless (e.g., to keep the bounded call consistent with other agentic components in the system), `maf-architecture-mapping` is the place to map "bounded AI capability" onto the right construct.
+
+## 11. Rejected alternatives
+- **All-deterministic**: insufficient alone — ticket text is unstructured/free-form; a fixed keyword or rule table won't generalize across phrasing, though simple deterministic rules may still handle an obvious subset.
+- **Bounded-AI-only**: sufficient — this is the chosen routing; a fixed-shape classification call plus deterministic execution covers both responsibilities with no agent anywhere.
+- **Agent-everywhere**: would technically function but at unnecessary cost — an agent adds run-time planning and a non-deterministic step count for a task that never needs to decide what to examine next.
+- **Multi-agent**: not needed — classification and execution share no distinct security, context, deployment, ownership, model, or specialisation boundary; splitting them into two agents would add orchestration cost against a boundary that doesn't exist.
+- **Workflow-only**: insufficient alone — a workflow with no bounded-AI step can't perform natural-language classification; but a thin sequential wrapper around the bounded call and the deterministic assignment step is exactly the recommended shape, so workflow is the right orthogonal wrapper, not a substitute for classification.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+**Decision**: route classification to a bounded AI capability, route assignment to deterministic code, sequence the two — no agent.
+**Trade-off**: a bounded classifier will occasionally misclassify ambiguous tickets; without a defined confidence-threshold or human-review policy, a misrouted ticket has no fallback path.
+**Assumptions** (labelled): destination teams form a fixed, known set; the ticketing system exposes an API to reassign a ticket.
+**Open questions**: What is the actual destination-team set? Is there a confidence threshold below which a ticket routes to human triage instead of auto-assignment? What audit trail is required for auto-routed tickets? How costly is a misroute in this system (correctable in seconds vs. customer-visible SLA breach)?
+
+**Architecture review required before implementation.**
+
+=== N2 : Deterministic vs agentic — which does this fraud-scoring requirement need? ===
+# Deterministic vs. agentic: fraud-scoring
+
+No concrete requirement text, signal list, or repository material was supplied — the working directory contains only a placeholder file, and no fraud-scoring context exists in it. This analysis treats "fraud-scoring requirement" as a generic shape, using the same reasoning the skill's own counter-example applies to this exact scenario, with the gaps left as open questions rather than invented facts.
+
+**1. Requirement**
+Decide whether a fraud-scoring capability should be built as deterministic logic, a bounded AI call, or an agent (single or multi-agent).
+
+**2. Fact table**
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+|---|---|---|
+| None — working directory holds no fraud-scoring–related content | A fraud-scoring capability is needed | The actual signal set and its source; whether investigation depth varies per transaction; what action follows a high score; who may authorize that action |
+
+**3. Responsibilities**
+1. Produce a fraud risk score/label for a transaction from its known signals.
+2. Act on that score (block/hold/flag a payment) once it crosses a risk threshold.
+
+**4. Routing decisions**
+- Responsibility 1 (produce the score) → **bounded AI capability**, or deterministic code if the weighting is simple and fixed enough to express as rules. Not routed to an agent.
+- Responsibility 2 (act on the score) → **deterministic code** for the threshold check itself; the *execution* of the action is a consequential operation governed by the authority chain (section 9), not by added autonomy.
+
+**5. Bounded-AI challenge record**
+- Responsibility 1: could a single fixed-input/fixed-output call satisfy this? **Yes.** Fraud scoring against a fixed, known signal set (illustrative: amount, velocity, geography, device match) is a scoring function — the signals to check are fixed in advance and don't change based on what any one signal returns. This is unlike an investigation where the next signal to check depends on the last one's result. No agent is justified.
+- Responsibility 2 is a fixed threshold lookup once the score exists — the challenge doesn't apply because no agent was ever a candidate for it.
+
+**6. Agent boundary justification**
+n/a — zero agents proposed.
+
+**7. Evidence classification**
+- Live transaction signals used for scoring — **structured application data** (rung 2), *hypothesis*: actual source/format not confirmed.
+- Any historical fraud-label data used to calibrate weighting — **historical evidence** (rung 5); caveat: true of past cases, not necessarily still true of current fraud patterns.
+- No agent memory used; no caveat required.
+
+**8. MCP boundary justification**
+None proposed. Transaction signals and any existing fraud/risk service would be reached through an existing API or service call; no concrete property (dynamic tool discovery across untrusted hosts, a specific isolation guarantee) has been named to justify an MCP boundary instead.
+
+**9. Authority chain**
+Blocking/holding/flagging a payment is a consequential operation:
+`agent/bounded-AI reasoning (the score) → authorization/policy: unknown — governance decision required → authoritative service (the payments/risk system of record) → execution (block/hold/flag applied) → audit (that system's own record)`
+No approver or process is invented in place of the unspecified policy.
+
+**10. Generic mechanism and product delegation**
+Mechanism stated generically: bounded AI capability (or deterministic rule) for scoring, deterministic threshold check for the accept/hold/block decision. No product or SDK is named here; if you want this mapped onto Microsoft Agent Framework constructs, that's a separate step via `maf-architecture-mapping`.
+
+**11. Rejected alternatives**
+- **All-deterministic**: sufficient if the signal set and weighting are simple, known, and stable; insufficient if scoring must weigh less-structured or fuzzy signals a rule table can't generalize over.
+- **Bounded-AI-only**: sufficient for this whole shape — score is one fixed call, accept/block is a fixed threshold.
+- **Agent-everywhere**: insufficient justification — nothing here needs run-time-determined investigation depth; an agent adds cost and non-determinism for no capability gain.
+- **Multi-agent**: insufficient — no distinct security/context/deployment/ownership/model/specialisation boundary is named, and no agent is proposed at all.
+- **Workflow-only**: insufficient alone — a workflow can sequence score → check → act, but doesn't replace the scoring computation itself.
+
+**12. Decisions, evidence, trade-offs, assumptions, open questions**
+- **Decision**: bounded AI (or deterministic code) for scoring, deterministic threshold logic for the action decision; no agent anywhere in this shape.
+- **Trade-off**: cheaper, deterministic, and auditable versus an agentic investigator; less adaptive if fraud requires correlating an open-ended, per-transaction-varying signal set.
+- **Assumption** (*hypothesis*): the signal set is fixed and known in advance — carried over from the skill's own illustrative fraud example, not asserted about your actual system.
+- **Open questions**: (a) is the actual signal set fixed, or does the investigation path genuinely vary per transaction — if it varies, responsibility 1 flips to a single agent under the bounded-AI challenge; (b) what action follows a high score, and does it require human approval before executing; (c) does an existing fraud/risk service already exist that this should call into.
+
+**Architecture review required before implementation.**
+
+If you have the actual requirement text (signal list, what happens on a high score, any existing risk service), share it and I'll re-run this with real facts instead of the illustrative placeholder.
+
+=== N3 : Do we need AI for this at all? The feature reads invoices and tags them. ===
+## Requirement
+
+Determine whether AI is needed at all for a feature that reads invoices and assigns tags to them.
+
+## Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+|---|---|---|
+| Working directory is an empty scratch folder (`seed.txt` only) — no existing invoice-processing code, schema, or pipeline to inspect | The feature reads invoices; the feature tags invoices | Invoice format (structured e-invoice/EDI/API payload vs. scanned PDF/image vs. free-form email attachment); what "tags" means (accounting category, cost center, GL code, fraud flag, approval route); the tag taxonomy (fixed list vs. open-ended); whether tags drive a downstream consequential action (e.g., auto-approval for payment, GL posting) or are purely informational/search metadata; volume/frequency; whether a human reviews output before it's used; whether any OCR/ERP system already exists |
+
+## Responsibilities
+
+Not atomic — decomposes into at least two:
+
+1. **Extract structured data from the invoice content** (vendor, amount, date, line items, etc.).
+2. **Classify/tag the extracted data** against a taxonomy.
+
+*(A third, "acquire/ingest the invoice document" — pulling it from an inbox, folder, or API — is mechanically present but is uncontroversially deterministic plumbing, not a routing decision point, so it's noted here rather than analyzed separately.)*
+
+## Routing decisions
+
+- **Extraction** — routing depends on the unknown format:
+  - If invoices arrive as structured data (vendor API payload, EDI, a fixed-template export) → **deterministic code** (parse fixed fields, no model needed).
+  - If invoices arrive as scanned images, PDFs, or free-form text/email → **bounded AI capability** (a single document-understanding/extraction call with a fixed output schema). Content varies in layout and wording in ways fixed parsing rules don't generalize to, but the *shape* of the task doesn't change per invoice.
+- **Tagging** — routing depends on the unknown taxonomy:
+  - If tags map deterministically from already-structured fields (e.g., vendor → category via a lookup table) → **deterministic code**.
+  - If tags require semantic judgment (e.g., "is this office supplies or software?") → **bounded AI capability** (one classification call, fixed input → fixed output tag/set of tags).
+
+Neither responsibility, on the facts given, needs a **single agent** or **multi-agent** mechanism.
+
+## Bounded-AI challenge record
+
+For both extraction and tagging: *"could a single bounded call with a fixed input/output shape satisfy this responsibility?"* — **Yes.** Nothing in the requirement indicates that intermediate findings should change what's examined next, in what order, or whether another step is needed (e.g., iterative vendor disambiguation across multiple lookups, escalation on low confidence, multi-hop reconciliation against POs/contracts). "Reads and tags" is a two-step fixed pipeline, not an open-ended investigation. If such iterative/ambiguity-resolution behavior turns out to be required, that would be new evidence changing this verdict — it isn't stated here, so an agent is not adopted on spec.
+
+## Agent boundary justification
+
+n/a — no agent proposed.
+
+## Evidence classification
+
+- The requirement statement itself is direct input from the user, not one of the seven system-evidence rungs.
+- No repository material beyond an empty scratch directory was available, so no rungs 1–5 (operational state, structured application data, org knowledge, documents, historical evidence) could be drawn on.
+- No agent memory (rung 6) was used to ground any claim in this analysis.
+- No external capability (rung 7) was invoked.
+- Net effect: this analysis rests entirely on the requirement as stated plus the general decision framework — everything in the "unknown" column above is a genuine gap, not filled from memory or assumption.
+
+## MCP boundary justification
+
+None proposed. Nothing in the requirement suggests a need for dynamic tool discovery across untrusted hosts or a specific isolation/negotiation guarantee that an existing API/service call (invoice source system, OCR service, ERP write) wouldn't already provide.
+
+## Authority chain
+
+Conditional — depends on the unknown downstream use of the tag:
+- If a tag is purely informational/search metadata → **no consequential operation**.
+- If a tag drives payment approval, GL posting, or another real-world effect without human review → that is a consequential operation, and the authorization policy is **unknown — governance decision required**. No approver, role, or process should be assumed until stated.
+
+## Generic mechanism and product delegation
+
+Mechanism only, stated generically per the routing above: deterministic parsing and/or a bounded AI extraction call, feeding a deterministic lookup and/or a bounded AI classification call. No product, SDK, or hosting construct is named — no platform-specific skill was invoked for this analysis, and the router does not supply product detail from memory.
+
+## Rejected alternatives
+
+- **All-deterministic** — sufficient only if invoices are always structured and tags always map via fixed lookup tables; likely insufficient the moment invoices are scanned/free-form or tags require semantic judgment, but this can't be ruled in or out without knowing the format.
+- **Bounded-AI-only** — sufficient on the facts given; this is the routing chosen where AI is needed at all, with no agent anywhere.
+- **Agent-everywhere** — would technically run, but adds autonomy, cost, and audit surface with no responsibility that needs it — rejected.
+- **Multi-agent** — no distinct security/context/deployment/ownership/model/specialization boundary was identified between "extract" and "tag" — rejected.
+- **Workflow-only** — an orchestration layer (ingest → extract → tag → store, possibly with a human-review branch) is plausibly needed regardless of AI use, but workflow alone only fully suffices if both steps turn out to be deterministic — unknown given the format gap.
+
+## Decisions, evidence, trade-offs, assumptions, open questions
+
+**Decision:** No agent is warranted by anything in the requirement. AI (a bounded capability, not an agent) is only needed for the parts of extraction/tagging that involve unstructured content or semantic judgment — and even that is conditional on facts not yet known.
+
+**Direct answer to "do we need AI for this at all?":** Maybe, and only a small, bounded slice of it — not an agent. If invoices are structured data and tags map via fixed rules, the answer is **no, plain code suffices**. If invoices are scanned/free-form and tags require semantic judgment, a **single fixed-shape model call** for extraction and/or classification is justified — but nothing here calls for an autonomous agent deciding its own next steps.
+
+**Trade-off accepted:** This analysis can't fully resolve deterministic-vs-bounded-AI for either responsibility without the invoice format and tag taxonomy — that's stated as an open question rather than guessed.
+
+**Assumptions:** None substituted for the unknowns above; each is left open.
+
+**Open questions:** invoice format; tag taxonomy and its ambiguity; whether tags feed a consequential downstream action; expected volume; whether a human reviews results.
+
+**Architecture review required before implementation.**
+
+=== N4 : Single agent or multi-agent here for an incident response assistant? ===
+# Architecture Analysis: Incident Response Assistant
+
+## 1. Requirement
+
+Decide whether an incident response assistant should be built as a single agent or a multi-agent system.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+|---|---|---|
+| Working directory is empty except a placeholder `seed.txt` (no application code, no domain model, no existing services) | The system is described as an "incident response assistant" | Incident domain (security / infra / product / customer-facing) |
+| Not a git repository — no history to inspect | Nothing else specified | Which telemetry/observability systems exist (logs, metrics, traces, ticketing) |
+| | | Whether remediation actions (restart, rollback, scale, page) are to be executed automatically or only recommended |
+| | | Whether human approval is required before any action, and by whom |
+| | | Data residency / security-clearance separation between incident types (e.g., security incidents vs. infra incidents) |
+| | | Deployment/hosting topology, existing API or tool boundaries |
+| | | Any existing runbook automation or on-call paging system |
+
+Since the requirement carries almost no system-specific detail, the analysis below routes a **generic** incident-response-assistant shape (labelled *illustrative example* where it names typical responsibilities) rather than inventing specifics about a real system.
+
+## 3. Responsibilities
+
+Not atomic — decomposed into six responsibilities (*illustrative example*, typical of incident-response tooling):
+
+1. Alert ingestion, dedup, and triage classification
+2. Diagnostic investigation (correlating signals to find likely cause)
+3. Root-cause hypothesis / evidence summary
+4. Remediation recommendation and execution
+5. Stakeholder communication (incident channel / status page updates)
+6. Post-incident documentation (timeline, draft postmortem)
+
+## 4. Routing decisions
+
+| # | Responsibility | Mechanism | Reasoning |
+|---|---|---|---|
+| 1 | Ingestion/triage | Deterministic code, with a **bounded AI capability** for classifying unstructured alert text into severity/category | Dedup and threshold rules are fixed logic; only free-text classification needs a model call, and that call has fixed input (alert payload) and fixed output (category, severity) |
+| 2 | Diagnostic investigation | **Single agent** | What to inspect next (metrics → logs → recent deploys → dependency health) depends on what was found in the prior step; the path isn't fixed in advance |
+| 3 | Root-cause hypothesis / summary | **Bounded AI capability** | Consumes the evidence bundle the investigation step already assembled (fixed input) and produces a fixed-shape hypothesis + confidence + summary — no further exploration happens here |
+| 4 | Remediation recommendation | **Bounded AI capability**; execution itself is **deterministic code** invoking pre-approved runbook actions | Recommending is a fixed-shape call over the diagnosis; executing a specific action should be a deterministic, auditable invocation, not a free-form agent decision |
+| 5 | Stakeholder communication | **Bounded AI capability** (drafting), deterministic posting | Drafting an update from a fixed incident-state input is a fixed-output task; posting is plumbing |
+| 6 | Post-incident documentation | **Bounded AI capability** | Synthesizes an already-closed event log into a draft postmortem — fixed input, fixed output, no iterative exploration |
+
+Only responsibility #2 clears the bar for an agent.
+
+## 5. Bounded-AI challenge record
+
+- **#2 (investigation):** "Could a single bounded call with a fixed input/output shape satisfy this?" **No.** Which data source to pull next is determined by what the previous pull showed (e.g., a latency spike routes to DB metrics; a DB metrics anomaly routes to recent deploy history; a clean deploy history routes to dependency health checks). The sequence and stopping point aren't knowable in advance, so a single fixed call can't cover it.
+- All other responsibilities (#1, #3, #4-recommend, #5, #6): challenge answered **yes** — each has a fixed input and a fixed output shape once its upstream step has run, so no agent was selected.
+
+## 6. Agent boundary justification
+
+Only one agent is proposed (the investigation agent) — **n/a**, no second agent to justify.
+
+*Open question, not adopted:* if this assistant must span incident domains with a genuine security-clearance or data-residency split (e.g., a security-incident investigator that must not see data a general-infra investigator holds), that would be a legitimate boundary for a second agent under FR-006. Nothing in the requirement establishes that this split exists — flagged as *hypothesis*, not adopted.
+
+## 7. Evidence classification
+
+- Repository state (empty directory, no git repo) — rung 1, **authoritative operational state** (directly observed, current).
+- The requirement text itself — treated as the primary source of what was asked, not classified on the evidence ladder (it's the request, not evidence about a system).
+- Everything else in this analysis (typical incident-response workflow shape: telemetry → correlation → remediation → comms → postmortem) is **not drawn from any system of record** — it is general domain knowledge, labelled *illustrative example* throughout. It carries no evidence rung because it is not a claim about *this* system; it is a generic pattern offered for routing purposes only.
+- No agent memory (rung 6) was used.
+- No retrieved knowledge was used to ground any claim about this specific system; the caveat that retrieved/general knowledge is evidence about a pattern, not authority over what this system must do, applies to the whole analysis.
+
+## 8. MCP boundary justification
+
+None proposed. The investigation agent will call existing telemetry/logging/ticketing APIs; no concrete property (dynamic discovery across untrusted hosts, a specific isolation guarantee, standardized cross-org capability negotiation) has been named to justify an MCP boundary over those existing API boundaries. If the assistant later needs to interoperate with third-party incident tooling across an organizational trust boundary, that could justify MCP — but that is unknown from the current requirement, not assumed.
+
+## 9. Authority chain
+
+Two responsibilities are consequential:
+
+- **Remediation execution** (#4): agent reasoning → authorization/policy/process control → authoritative service (runbook automation) → execution → audit. Authorization policy (who/what approves an automated restart, rollback, or scale action) is **unknown — governance decision required**. Human approval is not assumed.
+- **External/customer-facing communication** (#5, if status-page updates are customer-visible): same chain; whether customer-facing updates require human sign-off before publishing is **unknown — governance decision required**. Internal incident-channel updates are lower-stakes but the policy is still unspecified.
+
+## 10. Generic mechanism and product delegation
+
+Mechanisms are stated generically: deterministic rules, bounded AI capability (fixed-shape model calls), and one single agent for investigation. No platform-specific mapping is applied here — if this is to be built on Microsoft Agent Framework in .NET/C#, that mapping belongs to `maf-architecture-mapping` (which construct hosts the investigation agent, where the authorization gate for remediation execution lives, etc.). No such platform was indicated in the request, so this analysis stops at the generic mechanism.
+
+## 11. Rejected alternatives
+
+- **All-deterministic:** insufficient — triage classification of free-text alerts and investigative correlation both need model judgment that fixed rules can't express.
+- **Bounded-AI-only (no agent anywhere):** insufficient — the investigation step's next-action depends on intermediate findings, which a single fixed-shape call cannot capture.
+- **Agent-everywhere:** would have been sufficient but at unnecessary cost — routing triage classification, hypothesis drafting, remediation recommendation, comms drafting, and postmortem generation through agents adds unneeded latency, cost, and audit surface for tasks that are genuinely fixed-shape.
+- **Multi-agent:** not justified — no responsibility names a distinct security, context, deployment, ownership, model, or specialization boundary; a single investigation agent covers responsibility #2 alone.
+- **Workflow-only (no agentic step):** insufficient by itself for the investigation step, but workflow (orthogonal axis) is still needed to sequence triage → investigation → recommendation → execution → comms → postmortem, wrapping the one agentic step with deterministic and bounded-AI steps on either side.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+
+**Decision:** single agent — one agent for diagnostic investigation, everything else deterministic code or bounded AI capability, orchestrated by a workflow (the orthogonal axis) that sequences the steps.
+
+**Trade-off accepted:** this keeps remediation execution auditable and deterministic rather than letting an agent freely decide to act — at the cost of requiring an explicit, currently-unspecified authorization policy before any automated action ships.
+
+**Assumptions (labelled):** the six-responsibility shape is an *illustrative example* of a typical incident-response assistant, not derived from any actual system — there is no repository material describing the real one.
+
+**Open questions the requirement left unanswered:**
+- What incident domain(s) does this cover, and is there a genuine security/data-residency split that would justify a second agent?
+- Who authorizes automated remediation, and is any of it auto-executed or recommendation-only?
+- Are stakeholder updates customer-facing, and if so, is human sign-off required before publishing?
+- What existing telemetry/ticketing/runbook systems and API boundaries already exist for the investigation agent to call?
+
+**Architecture review required before implementation.**
+
+=== N5 : Should we expose this as MCP for our existing billing API? ===
+# Architecture Analysis — Exposing the Billing API via MCP
+
+**1. Requirement**
+Decide whether to add an MCP surface in front of the existing billing API, based on the question "Should we expose this as MCP for our existing billing API?"
+
+**2. Fact table**
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+|---|---|---|
+| None — the working directory (`C:\Dev\t205-mapping-scratch\claude\N5`) contains no billing API code, service definition, or docs; only an unrelated scratch file (`seed.txt`). | A billing API already exists. The request is whether to expose "this" via MCP. | What "this" names (one endpoint? the whole billing surface?). Who/what would consume it (one known internal agent vs. multiple/untrusted AI hosts). Whether the exposed operations are read-only or consequential (charge, refund, adjust invoice, cancel subscription). The billing API's current auth/authz model. Whether an AI agent is driving this request at all, or if MCP is being considered speculatively. |
+
+**3. Responsibilities** (not atomic — at least two)
+- (a) Whether an MCP capability boundary is justified over the billing API's existing boundary at all.
+- (b) If so, which operations to expose and under what authority chain, since billing operations can be consequential (money movement).
+
+**4. Routing decisions**
+Neither responsibility, as stated, requires AI decision-making — nothing here is a classification, extraction, or multi-step investigation. This is an integration/capability-boundary decision, which routes to deterministic architecture, not to any point on the autonomy axis (bounded AI / single agent / multi-agent). The presence of "MCP" in the question doesn't itself imply an agent is being designed — MCP is a boundary/protocol choice, orthogonal to whether any AI agent exists on the other side of it.
+
+**5. Bounded-AI challenge record**
+N/A — no responsibility was proposed for agent routing, so the challenge doesn't apply. Recorded per the gate rather than skipped.
+
+**6. Agent boundary justification**
+N/A — zero agents proposed.
+
+**7. Evidence classification**
+No evidence above rung 4 was available or used — no repository material (rung 1–2), no org knowledge/runbooks (rung 3), no documents (rung 4), no historical evidence (rung 5) about this specific billing system was found or consulted. Nothing here relies on agent memory (rung 6) or an external capability (rung 7). General knowledge about when MCP is/isn't warranted is background architectural knowledge, not evidence about *your* system, and is flagged as such rather than presented as a discovered fact.
+
+**8. MCP boundary justification**
+None established. Per FR-008, an MCP boundary is adopted only when a concrete property is named that the existing API boundary can't provide — dynamic tool discovery across multiple/untrusted AI hosts, a specific isolation guarantee, or standardized capability negotiation. The requirement names none of these. **Default: the existing billing API boundary stands; no MCP surface is justified yet.** It becomes justified if, concretely: several different AI hosts (not one hard-coded internal agent) need to discover and call billing operations without bespoke per-host integration code.
+
+**9. Authority chain**
+Billing operations are plausibly consequential (*hypothesis* — "billing" suggests money movement, not confirmed). If any exposed operation mutates money or account state (charge, refund, cancel), the full chain applies:
+`agent reasoning → authorization/policy → authoritative billing service → execution → audit`
+Authorization policy for an AI-initiated billing mutation is **unknown — governance decision required**. If the scope turns out to be strictly read-only (e.g., invoice lookup), this gate doesn't bind — but that scope isn't confirmed.
+
+**10. Generic mechanism and product delegation**
+Generic mechanism: keep the existing API boundary; do not add a new capability boundary without a named justifying property. No stack/platform was specified, so product/SDK selection (e.g., how to build an MCP server if one is later justified) is left to `maf-architecture-mapping` or another installed platform skill once the stack is known — not supplied here from memory.
+
+**11. Rejected alternatives**
+- **All-deterministic** — sufficient; nothing in the requirement needs AI/agent behavior at all.
+- **Bounded-AI-only** — sufficient/moot; no classification or extraction task was named either.
+- **Agent-everywhere** — insufficient justification; no run-time "what to examine next" decision was described, and forcing autonomy onto a money-moving API with no stated need adds risk without benefit.
+- **Multi-agent** — not needed; no distinct security/context/deployment/ownership/model/specialisation boundary was named for even one agent, let alone two.
+- **Workflow-only** — possibly relevant if billing steps must run in a fixed sequence with retries, but that's orthogonal and doesn't answer the MCP-boundary question either way.
+
+**12. Decisions, evidence, trade-offs, assumptions, open questions**
+- **Decision:** don't add MCP by default. Keep the existing billing API boundary until a concrete MCP-justifying property is named.
+- **Trade-off:** MCP buys a standardized, host-agnostic discovery/negotiation surface — worth it if multiple or untrusted AI clients need to find billing tools dynamically. It costs an additional network-facing, auth-bearing surface on top of a money-handling system, which is a meaningful cost for a single known consumer.
+- **Assumption (labelled):** billing operations may be consequential — not confirmed, treated as a hypothesis driving gate 9.
+- **Open questions:** (1) What specific capability does "this" refer to? (2) One known internal agent, or multiple/external AI hosts? (3) Read-only or consequential operations? (4) What governance/authorization policy would apply to an AI-initiated billing action? (5) What boundary does the billing API expose today (REST/gRPC/SDK) that MCP would sit alongside?
+
+**Architecture review required before implementation.**
+
+To route this further I need the answer to open questions 1–2 in particular — what capability, and how many/what kind of AI consumers are actually calling it.
+
+=== N6 : Add an AI agent that investigates failed batch jobs. ===
+# Architecture Analysis — AI agent to investigate failed batch jobs
+
+## 1. Requirement
+Add an AI agent that investigates failed batch jobs.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+|---|---|---|
+| Working directory (`C:\Dev\t205-mapping-scratch\claude\N6`) contains only a placeholder `seed.txt`; not a git repo; no batch-job orchestrator, job-tracking schema, log pipeline, or existing agent code present. | An AI agent should be added. | Its job is to "investigate" **failed batch jobs**. | Which batch platform runs the jobs (scheduler, cluster, cloud batch service, cron, custom runner) |
+| | | What "failed" means operationally (non-zero exit, exception, timeout, SLA breach) |
+| | | Where failure evidence lives (log store, metrics system, job-tracking DB) and its access pattern |
+| | | What "investigate" should produce (a report, a root-cause classification, a remediation recommendation, an executed remediation) |
+| | | Whether any corrective action (retry, kill, alert, ticket) is in scope or authorized |
+| | | Who/what consumes the output (on-call human, ticketing system, dashboard) |
+| | | Data sensitivity / residency constraints on log or job data |
+
+No incidents, telemetry, job names, or platform details are invented anywhere below; where general domain knowledge about batch-failure modes is used to reason about routing, it is labelled *illustrative example*, not fact.
+
+## 3. Responsibilities
+At least two — not atomic:
+1. **Detect that a batch job has failed** (trigger).
+2. **Investigate the failure** — gather evidence and determine what evidence to look at next based on what's found.
+3. **Produce a structured investigation report/recommendation** for a human or downstream system to act on.
+4. **(Conditionally in scope) Initiate a consequential follow-up** — e.g., open a ticket, page on-call, retry the job — only if "investigate" is read to include triggering action, which the requirement does not state.
+
+## 4. Routing decisions
+
+| # | Responsibility | Mechanism | Reasoning |
+|---|---|---|---|
+| 1 | Detect failure | **Deterministic code** | "Job status == failed" (or an orchestrator's failure webhook/event) is a fixed rule — nothing about the decision to start an investigation changes based on content not already known. |
+| 2 | Investigate the failure | **Single agent** | The evidence to pull next (dependency health, recent deploy diff, resource metrics, similar historical failures) is only knowable after reading the prior evidence, and the number of follow-up steps varies by failure. See bounded-AI challenge below. |
+| 3 | Produce structured report | Folded into the agent's own output (fixed output schema at the agent's terminal step) — **not** a separate mechanism. No second bounded-AI call is needed just to reformat the agent's own conclusion. |
+| 4 | Consequential follow-up (ticket/page/retry) | Not routed — **out of scope as stated**. If added, it is deterministic code (ticket/page API call) gated behind an authorization step; see §9 authority chain. Routing it as agent-initiated action requires that gate, not agent autonomy over the action itself. |
+
+Routing order followed: deterministic code considered first for every responsibility; only responsibility 2 failed the deterministic and bounded-AI options.
+
+## 5. Bounded-AI challenge record
+Applies to responsibility 2 (the only one routed to an agent).
+
+**Question:** Could a single bounded call with a fixed input and fixed output shape (e.g., "given this log excerpt and exit code, classify the failure") satisfy "investigate"?
+
+**Answer: No.** Batch-job failures span heterogeneous root causes (*illustrative example*: resource exhaustion, upstream dependency outage, bad input data, code regression, infra flake) and a single evidence bundle frequently doesn't contain the answer. Whether to next check dependency health, recent deploys, resource metrics, or prior similar failures — and whether any further step is needed at all — depends on what the first look turns up. That branching, run-time decision about what to examine next is exactly the single-agent case (FR-005), not "merely complex" or "merely natural language."
+
+Caveat: if this system's failure modes are known to be narrow and always fully diagnosable from one fixed evidence bundle (e.g., only ever one job type with one log format), bounded AI would suffice — that is a fact about the actual system this analysis doesn't have, per the fact table's unknown column.
+
+## 6. Agent boundary justification
+Only one agent is proposed. **n/a** — no second agent is introduced. A tempting split ("evidence-gathering agent" + "diagnosis agent") is rejected: both stages would share the same security boundary, context, deployment, ownership, model, and specialization — that's a pipeline stage split, not a boundary difference (FR-006), so it stays one agent making multiple tool calls.
+
+## 7. Evidence classification
+- Working-directory listing (empty scratch folder, no existing batch/agent code) — **rung 1, authoritative operational state** (live filesystem state at time of analysis).
+- General reasoning about typical batch-failure categories used in §5 — **not evidence about this system**; labelled *illustrative example* throughout, not a discovered fact.
+- No agent memory (rung 6) was used to ground any claim about this system. No external capability (rung 7) was invoked. Both caveats therefore state: not applicable — nothing here was sourced from memory or a third-party tool answer.
+
+## 8. MCP boundary justification
+**None proposed.** The agent's tools (fetch logs, fetch job metadata, check dependency status, query historical failures, and — if in scope — file a ticket) are naturally existing API/service calls. No concrete property (dynamic discovery across untrusted hosts, a specific isolation guarantee, standardized capability negotiation across multiple independent hosts) has been named that an MCP boundary would provide over calling those APIs/services directly. If a later requirement adds "multiple independent agent hosts must discover and call these tools without shared code," MCP would need to be re-evaluated against that specific property.
+
+## 9. Authority chain
+Responsibility 2–3 (investigate, report) has **no consequential operation** — it reads evidence and produces a report; nothing external is mutated.
+
+Responsibility 4 (if "investigate" is scoped to include opening a ticket, paging on-call, or retrying the job) **is** consequential:
+```
+agent reasoning -> authorization/policy/process control -> authoritative service -> execution -> audit
+```
+Authorization policy is **unknown — governance decision required**: the requirement does not state whether the agent may autonomously page a human or retry a job, or must stop at a recommendation for a human to act on. This gap should not be filled with an assumed approver or process.
+
+## 10. Generic mechanism and product delegation
+Generic shape: a **deterministic trigger** (failure event/poll) invokes a **single, tool-using agent** that iteratively gathers evidence and terminates with a structured report; an **orthogonal workflow** (retry/timeout handling around the agent call, and — only if governance approves — a gated action step) wraps it.
+
+No platform-specific request was made this turn, so per FR-010/FR-011 this stops at the generic mechanism. For mapping this onto Microsoft Agent Framework / .NET constructs (which MAF type owns the agent, where the human-approval gate goes, session vs. memory for evidence gathered mid-investigation), the installed `maf-architecture-mapping` skill is the next step — say the word and I'll run it.
+
+## 11. Rejected alternatives
+- **All-deterministic** — insufficient for the core investigation (branching evidence-seeking can't be captured as fixed rules); sufficient only for the trigger step.
+- **Bounded-AI-only** — insufficient: a single fixed-shape call can classify against a fixed evidence bundle but can't decide what to pull next when that bundle is inconclusive, which is the point of "investigate."
+- **Agent-everywhere** — would work but is wasteful and adds nondeterminism to the trigger step, which is a plain fixed rule with no judgment involved.
+- **Multi-agent** — not needed: no distinct security/context/deployment/ownership/model/specialization boundary was named for a second agent (see §6).
+- **Workflow-only** — insufficient alone: a fixed step order can't adapt investigation depth/path to findings; a workflow is still useful, but only as the orthogonal wrapper around trigger → agent → (gated) action.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+**Decision:** deterministic trigger → single agent (tool-using, iterative evidence gathering) → structured report; any remediation/paging/ticketing stays a separate, explicitly gated deterministic step pending a governance decision, not something the investigating agent does on its own authority.
+
+**Trade-off accepted:** giving the agent run-time discretion over which evidence source to consult next buys it the ability to handle heterogeneous failure modes, at the cost of non-deterministic latency/cost per investigation and the need for tool-call auditing.
+
+**Assumptions (labelled):** none of substance were made — the analysis deliberately stopped at "unknown" for platform, evidence sources, and action authorization rather than inventing them.
+
+**Open questions for the user:**
+- What system emits/hosts the batch jobs, and how is "failed" signaled?
+- Where does failure evidence live (logs, metrics, job DB) and how would the agent read it?
+- Is any action (retry, page, ticket) actually in scope, or is this strictly read-only investigation + report?
+- Who/what consumes the report (human on-call, dashboard, ticketing system)?
+
+**Architecture review required before implementation.**
+
+=== N7 : Review this agentic design before we build it. ===
+There's no design document in this directory yet — just a placeholder `seed.txt`. To review your agentic design, I need the actual design itself: what problem it solves, what responsibilities you're considering making agentic (vs. deterministic), and any constraints (single vs. multi-agent, MCP exposure, etc.).
+
+Could you paste the design (or point me to where it lives), or describe the system you're planning?
+
+=== N8 : Does this need a workflow or an agent? It reads tickets and assigns severity. ===
+## 1. Requirement
+
+A system reads tickets and assigns a severity to each one; the question is whether that responsibility should be built as a workflow, an agent, or something else.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+|---|---|---|
+| None — the working directory (`C:\Dev\t205-mapping-scratch\claude\N8`) contains only a placeholder `seed.txt`; no ticket-system integration, severity taxonomy, or existing pipeline code is present. | The system reads tickets. It assigns a severity to each. The user is choosing between "workflow" and "agent" as the shape. | Which ticket system (Jira, ServiceNow, GitHub Issues, etc.); the severity taxonomy (how many levels, what defines each); whether severity depends only on a single ticket's own content or requires cross-referencing other tickets/incidents/telemetry; whether the assigned severity is written back automatically or surfaced for human confirmation; whether tickets are processed one at a time (event-triggered) or in batch; what downstream system (paging, SLA clock) consumes the severity; what authorization policy governs automated writes to the ticket system. |
+
+## 3. Responsibilities
+
+Not atomic — decomposes into at least three:
+1. Retrieve ticket content.
+2. Classify severity from that content.
+3. Write the assigned severity back to the ticket system.
+
+## 4. Routing decisions
+
+1. **Ticket retrieval → deterministic code.** Fetching a ticket by ID, or polling/subscribing for new ones, is a fixed lookup; nothing about it changes based on content not yet seen.
+2. **Severity classification → bounded AI capability.** Fixed input (one ticket's text/fields), fixed output (one severity label from a defined taxonomy). See bounded-AI challenge below — this is the one responsibility that could plausibly have been routed to an agent instead.
+3. **Severity write-back → deterministic code.** A fixed update call against the ticket system's API once the label is decided.
+
+## 5. Bounded-AI challenge record
+
+Question: *could a single bounded call with a fixed input/output shape satisfy severity classification?*
+
+Answer, on the requirement as given: **yes**. The input is one ticket's content; the output is one label from a fixed set. Nothing in the requirement indicates that intermediate findings would change what gets examined next, in what order, or whether another step is needed — which is the actual bar for an agent (FR-005), not mere complexity or the presence of natural language. So an agent is not justified by what's stated.
+
+This flips if severity assignment turns out to require multi-step investigation — e.g., correlating with related open tickets, checking live system health, or walking an escalation runbook whose next lookup depends on what the previous one found. That would be a single agent, not a bounded call. The requirement as given doesn't establish this either way — recorded as an open question, not assumed.
+
+## 6. Agent boundary justification
+
+n/a — no agent is currently proposed. Even under the "flip" scenario above, at most one agent (the classifier) would be justified; no second responsibility carries a distinct security, context, deployment, ownership, model, or specialisation boundary that would justify a second agent.
+
+## 7. Evidence classification
+
+- Ticket content, if used to ground classification: **rung 4 — Documents** (tickets, wikis, design notes).
+- Any structured fields read via the ticket system's API (status, existing priority, timestamps): **rung 2 — Structured application data**.
+- No agent memory was used in this analysis (caveat n/a).
+- No retrieved organizational knowledge (runbook, policy doc, ADR) was available to ground the severity taxonomy — its absence is itself one of the open questions above, not filled with an invented taxonomy.
+
+## 8. MCP boundary justification
+
+None proposed. Ticket read/write go through whatever integration the ticket system already exposes (its own API); nothing in the requirement names a property — cross-host dynamic tool discovery, a specific isolation guarantee, standardised capability negotiation — that only an MCP boundary would provide.
+
+## 9. Authority chain
+
+Writing the assigned severity back to the ticket is a consequential operation — it can drive downstream escalation, paging, or SLA behavior.
+
+```
+reasoning:        bounded AI capability outputs a severity label (+ rationale)
+authorization:     unknown — governance decision required (does write-back need human
+                    confirmation for high/critical severities, or is full auto-write permitted?)
+authoritative service: the ticket-tracking system (system of record for ticket state)
+execution:         deterministic update call against that system's API
+audit:             unknown — governance decision required (is every automated assignment
+                    logged with rationale, and is it revertible?)
+```
+
+## 10. Generic mechanism and product delegation
+
+Generic mechanism: deterministic retrieval → bounded AI classification → deterministic write-back, sequenced by a workflow/orchestration layer (trigger on new/updated ticket, retry on transient API failure). No product or platform construct is named here — that mapping belongs to `maf-architecture-mapping` (or another installed platform skill) if you want this expressed in a specific framework; say so and I'll route there next.
+
+## 11. Rejected alternatives
+
+- **All-deterministic** — insufficient: free-text ticket content needs judgment that fixed keyword/rule matching handles only crudely.
+- **Bounded-AI-only, no agent anywhere** — sufficient, given the requirement as stated.
+- **Agent-everywhere** — would work but wastes runtime autonomy and audit surface on retrieval and write-back, which are both fixed single-call operations.
+- **Multi-agent** — not needed: only one candidate agentic responsibility exists, and it didn't clear the bounded-AI challenge.
+- **Workflow-only, no agentic step** — insufficient alone: something still has to produce the classification, and pure deterministic rules are the weak point for open-ended ticket text; the workflow is necessary but must still contain the bounded AI call.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+
+**Decision:** this is a **workflow wrapping a bounded AI capability**, not an agent — retrieve (deterministic) → classify (single bounded model call) → write back (deterministic), orchestrated with a trigger and retry logic. No agent clears the bar here on the information given.
+
+**Trade-off accepted:** if classification later needs cross-ticket or cross-system correlation, this routing under-provisions and the classification step would need to become a single agent — cheap to fix later, but worth naming now rather than over-building an agent today on the strength of "it reads text."
+
+**Assumptions:** none substantive beyond what's in the fact table; no severity taxonomy, ticket system, or policy was invented.
+
+**Open questions:** (1) does classification ever require more than the ticket's own content? (2) is write-back fully automatic or gated by severity level? (3) what audit trail exists for automated assignments? All three are governance/design decisions the requirement doesn't yet answer.
+
+**Architecture review required before implementation.**
+
+=== N9 : Map this new support-ticket-priority requirement to Microsoft Agent Framework constructs in .NET. ===
+## MAF construct mapping — support-ticket-priority assignment
+
+Per-responsibility mapping (step 2), building on the approved routing decision above.
+
+| Responsibility | MAF construct | Why |
+|---|---|---|
+| **R1** — assemble ticket context (tier, SLA, history) | **No MAF construct.** Plain code/data-access calls to existing systems of record. | Routed deterministic → per `construct-map.md`: "Deterministic → no MAF construct." This is also **not** row 3 (`AIContextProvider`/RAG) and **not** row 2/4 (memory) — those exist to inject or recall evidence for an *agent's reasoning loop*, and there is no agent here. Tier/SLA/history are structured data (rung 2) feeding a rule table, not semantic evidence an agent must cite. |
+| **R2** — extract urgency/sentiment from free text | A **direct, structured-output model call** — the `Microsoft.Extensions.AI` `IChatClient` surface, per `maf-surface.md`. **Not** `AIAgent`, **no** `AgentThread`. | Routed bounded-AI → per `construct-map.md`: "Bounded AI → a direct model call, not an agent... no agent loop, no `AgentThread`/session construct." Fixed input (ticket text) → fixed output shape (sentiment score, urgency flags). *(Unsure — flagged in `maf-surface.md`: confirm `IChatClient` is still the current recommended bounded-call surface, and its GA/preview status, before citing a namespace or package version.)* |
+| **R3** — compute P1–P4 from structured signals | **No MAF construct.** Plain code (rule/weighted-threshold table). | Deterministic once R1+R2 outputs are structured — same reasoning as R1. |
+| **R5** — human gate for P1/P2 before the write | **Row 8**: `Microsoft.Agents.AI.Workflows` graph with a human-in-the-loop gate node, on the P1/P2 branch only | This is "a fixed step sequence with an authorization boundary at one specific step" — not row 9 (`ApprovalRequiredAIFunction`), because row 9 is *per-tool-call* approval inside an agent's function-calling loop, and there is no agent here doing tool calls. The authorization boundary sits on a graph transition (R3 → R4), which is exactly row 8's shape. |
+| **R4** — auto-apply/write (P3/P4 direct; P1/P2 after gate) | **No MAF construct.** Plain code (write to the ticketing system), reached either directly from R3 (P3/P4) or only after R5's gate clears (P1/P2). | Deterministic. |
+| **Overall R1→R2→R3→R5→R4 sequence** | **Row 8**: a `Microsoft.Agents.AI.Workflows` graph hosts the whole pipeline as its fixed step sequence, with R2 as the one node that internally makes an `IChatClient` call and R5 as the one node with an authorization boundary | Matches `decision-framework.md`'s two-axis model directly: workflow (axis 2) is orthogonal to autonomy (axis 1) — a deterministic step (R1/R3/R4) and a bounded-AI step (R2) live in the same workflow without either one implying the other. |
+
+## Runtime and control (step 3)
+
+1. **Hosting placement** — no agent is hosted, so there's no forced case for a separately-hosted agent runtime. R2's `IChatClient` call and the surrounding workflow can run **in-process** with the ticket-ingestion service; hosted-runtime concerns (sandbox isolation, session lifecycle) in `runtime-and-control.md` govern `AIAgent` hosting and don't apply to a plain chat-client call.
+2. **Ingress contract** — the workflow's own trigger is the ticket-arrival event (email/portal/API), not an agent's Responses-protocol ingress — there's no agent ingress to negotiate.
+3. **Protocol negotiation** — n/a; no A2A peer, no MCP client (consistent with the router's "no MCP boundary" decision).
+4. **Isolation** — n/a for hosting; the real isolation-shaped question is *access control on the human-gate step* (who is allowed to approve/override), which is an authorization concern, not a hosting one.
+5. **Runtime control (lifecycle)** — the workflow instance pauses at R5 for P1/P2 tickets; how long it waits before idling/timing out and what happens on timeout is a workflow-engine lifecycle policy the requirement doesn't specify — **open question**, carried from the router's authority-chain gap (no named approver, no stated SLA on the review itself).
+6. **Estate control (identity propagation)** — if the audit trail must record *who* approved a P1/P2 override (not just a claimed name), that needs the approver's identity to reach the gate as a verifiable credential, not an assumed header — this is the same "identifier ≠ delegated-access grant" distinction `maf-surface.md` recorded from the 2026-09-05 spike, applied here to the human reviewer rather than an end customer.
+7. **Human authority layer** — this is the **row 8 workflow gate**, specifically distinguished from row 9 (per-tool-call approval, not applicable — no agent tool loop) and from delegated-access consent (not applicable — nothing here acts *as* the customer or another identity).
+
+## Assurance (step 4)
+
+- **Observe**: capture (a) the exact input/output of every R2 `IChatClient` call, and (b) the workflow's own step trace — which branch fired at the P1/P2 vs P3/P4 fork, whether the gate was invoked, who approved/overrode and when, and the final written priority. There's no agent to self-narrate, so this evidence has to come from logging the call and the workflow trace directly, not from asking anything to summarize itself.
+- **Evaluate**: for R2, score sentiment/urgency output against a held-out, human-labeled ticket set (precision/recall) — not "did it look plausible." For R3, since it's deterministic, this is a plain unit-test surface: given structured inputs, assert the exact P1–P4 bucket. For the end-to-end flow: every ticket the rule table maps to P1/P2 must have gone through R5's gate — 100% coverage is a correctness property to assert directly, not a statistic to sample.
+- **Verify behaviour**: watch for R2 drifting into agent territory — e.g., someone later adding "if sentiment is ambiguous, go re-check ticket history differently" turns a fixed-shape call into something deciding what to examine next, and that drift needs a new routing decision, not a quiet code change. There's no responsibility currently routed to an agent, so the opposite drift (an agent that never varies its step) doesn't apply here.
+- **Regress**: re-run the R2 evaluation set and the R3 rule-table unit tests on every prompt, model, or threshold change — R3's thresholds are exactly what decides which tickets skip human review, so a silent regression there defeats the entire point of the P1/P2 gate.
+
+## Dated facts and open questions (steps 5–6)
+
+- `IChatClient` as the bounded-AI construct, and `Microsoft.Agents.AI.Workflows` as the workflow-graph construct, are both named only at the concept level here — **neither's exact current namespace, signature, nor GA/preview status was verified against a live deployment in this session** (`maf-surface.md`'s verified-against-a-running-deployment facts cover isolation model, identity propagation, and protocol/binding — not these two). Confirm both against current Microsoft Agent Framework / `Microsoft.Extensions.AI` documentation before writing code, and if either is preview-status, record the risk and pin an exact SDK version before the design ships.
+- The exact API shape of a "human gate" inside `Microsoft.Agents.AI.Workflows` (a named first-class node type vs. an assembled pause/resume primitive) is not asserted here — verify live.
+- Carried forward unresolved from the router analysis, all of which the workflow's R5 gate and audit logging depend on: **who approves P1/P2 overrides**, **which system is the ticketing system of record** (the target of R4's write), **what audit trail captures the gate's decision**, and **what confidence threshold, if any, routes a nominally-P3/P4 ticket to review anyway**. None of these were invented — they remain *unknown — governance decision required*.
+
+**Architecture review required before implementation.**
+
+=== N10 : Which MAF construct should I use for a component that summarizes meeting notes? ===
+Short answer: **not an `AIAgent`.** Summarizing meeting notes is a bounded AI capability — fixed input (the notes), fixed output shape (a summary), and nothing about the process changes based on what the model finds partway through. Per the router's bounded-AI challenge: a single call with fixed input/output satisfies this, so an agent isn't justified.
+
+**Decision**
+- Requirement: component that summarizes meeting notes.
+- Routed mechanism: bounded AI capability (axis-1 tier 2), not single agent.
+- Agent boundary: none — no agent selected, so no boundary to justify.
+- Rejected alternatives:
+  - All-deterministic — insufficient, summarization needs judgment/NL understanding.
+  - Bounded-AI-only — sufficient; this is the routing.
+  - Agent-everywhere — unnecessary; there's no runtime decision for an agent loop to make.
+  - Multi-agent — no distinct security/ownership/model/specialization boundary exists to justify a second agent.
+  - Workflow-only — insufficient alone (you still need the AI call), but a deterministic workflow can wrap it (fetch notes → call → store), since workflow is an orthogonal axis, not a substitute.
+
+**MAF construct**: a direct, structured-output model call — no `AIAgent`, no `AgentThread`/session construct, no agent loop. If you want a structured result (e.g., decisions + action items as JSON), apply structured output to that direct call rather than standing up agent machinery.
+
+**When this would change**: if the component must decide at runtime whether to pull in more context — prior meeting notes, calendar entries, related tickets — based on what it finds in the current notes, or has to iteratively chunk an unbounded transcript where intermediate findings drive the next step, that crosses into single-agent (`AIAgent`) territory (construct-map.md row 1). As stated, plain "summarize these notes" doesn't clear that bar.
+
+**Architecture review required before implementation.**
+
+=== N11 : Write the C# code for an AIAgent tool-calling loop. ===
+Wrote `AIAgent.cs` in the scratch folder. It implements the loop explicitly:
+
+1. Seed `messages` with optional system instructions + the user message, and pass `tools` via `ChatOptions`.
+2. Call `IChatClient.GetResponseAsync`, append the returned messages.
+3. If the response has no `FunctionCallContent`, return `response.Text` as the final answer.
+4. Otherwise invoke each requested `AIFunction`, wrap results/errors as `FunctionResultContent`, append them as a `ChatRole.Tool` message, and loop.
+5. Bail out with an exception if `maxIterations` is exceeded (guards against infinite tool-call cycles).
+
+Requires `Microsoft.Extensions.AI` plus a concrete `IChatClient` (e.g. `Microsoft.Extensions.AI.OpenAI` or Azure OpenAI's adapter) — usage example is at the bottom of the file. Since this is a from-scratch snippet not wired into a build, I haven't compiled it; if you add it to a project with the right NuGet packages, let me know and I'll `dotnet build` to verify.
+
+=== N12 : Provision the Azure Container App and Foundry resources for this hosted agent. ===
+The N12 folder is essentially empty — just a `seed.txt` placeholder — with no application code, Dockerfile, or infrastructure-as-code (Bicep/Terraform/azd) present. I checked the sibling scratch folders too: this looks like one of many parallel trial directories (`N1`–`N12`, `P1`–`P15`) under `t205-mapping-scratch`, and only `N11` has any agent code (a minimal in-process C# tool-calling loop, unrelated to Container Apps/Foundry hosting).
+
+Azure CLI is installed and already authenticated to a live, billable subscription (**"Alon Main - Microsoft Azure Sponsorship"**, `e5baf736-76c0-401a-843e-0a2843ed1594`), so I can act — but I don't want to guess my way into creating real cloud resources here. Before provisioning anything I need:
+
+1. **What is "this hosted agent"?** There's no app code in N12 to containerize. Should I build a minimal agent app here first (e.g. based on the N11 pattern), or is there source elsewhere you want me to point at?
+2. **Resource group & region** — create a new resource group (name?) or use an existing one, and which Azure region?
+3. **Azure AI Foundry specifics** — new Foundry hub + project, or an existing one to connect to? Which model deployment(s) does the agent need (e.g. gpt-4o-mini)?
+4. **Naming convention** — any prefix/pattern you use for resource names (registry, container app env, etc.)?
+
+Since this would create real, billable resources in a live subscription, I'd rather confirm these than assume. Let me know and I'll provision it (via `az` CLI or Bicep, whichever you prefer).
+
+=== N13 : Walk me through the Foundry portal clicks to deploy an agent. ===
+Here's the click-by-click path in the Microsoft Foundry portal (ai.azure.com) for the current GA agent experience:
+
+## 1. Get into a project
+1. Go to **ai.azure.com** and sign in.
+2. If you land on the Foundry home page, make sure the **"New Foundry"** toggle (top of page) is on — this is the GA experience, not "classic."
+3. If you don't have a project yet, you'll be prompted to create one (or click **Create an agent**, which auto-provisions an account + project for you and auto-deploys `gpt-4o` — the fastest path for a first try).
+4. If creating manually: enter a project name → optionally click **Advanced options** to pick subscription/region/resource group → **Create** → wait for provisioning.
+
+*Requires the **Foundry Account Owner** (or Contributor/Owner) role at the subscription to create the account/project, and **Foundry User** at the project level to create agents afterward.*
+
+## 2. Make sure a model is deployed
+5. In the left nav, click **Models + endpoints**.
+6. If nothing's deployed yet, click **+ Deploy model**, pick a model (e.g., `gpt-4o`, `gpt-4o-mini`), and confirm the deployment. Note the **deployment name** — you'll select it when building the agent.
+
+## 3. Create the agent
+7. In the left nav, click **Agents**.
+8. Click **+ New agent** at the top.
+9. This drops you into the agent builder/playground pane on the right, where you:
+   - Give the agent a **name**
+   - Pick the **model deployment** from step 6
+   - Write its **instructions** (system prompt)
+   - Add **tools** as needed — Code interpreter, File search / knowledge (upload files or connect Azure AI Search), Function calling, OpenAPI-spec actions, Bing grounding, or connected/sub-agents
+10. The agent saves automatically as you configure it — there's no separate "deploy" button; creating it *is* the deployment. It gets an agent ID immediately.
+
+## 4. Test it
+11. Use the chat pane on the right side of the same screen to send it messages and verify behavior before wiring it into an app.
+
+## 5. Wire it into code (optional)
+12. Go to the project **Overview** page → under **Libraries/Endpoint**, copy the project endpoint (`https://<resource>.services.ai.azure.com/api/projects/<project>`).
+13. Combine that with the model deployment name from step 6 and the agent ID from step 10 to call it via the Azure AI Agents SDK (Python/.NET/JS/Java) or REST, using `DefaultAzureCredential`/`az login` for auth.
+
+One thing to flag: the **classic** Agent Service (the older Assistants-style API/portal) is deprecated and retires **March 31, 2027** — if your portal still shows that experience, switch on "New Foundry" or follow Microsoft's migration guide, since new work should target the GA Agents Service described above.
+
+Sources:
+- [Quickstart - Create a new Foundry Agent Service project (classic) - Microsoft Learn](https://learn.microsoft.com/en-us/azure/ai-foundry/agents/quickstart)
+- [Build Your First AI Agent in Microsoft Foundry Step by Step](https://jannikreinhard.com/microsoft-foundry-first-agent/)
+- [Building AI Agents in Microsoft Foundry Agent Service — Medium](https://timhanewich.medium.com/building-and-using-ai-agents-in-azure-ai-foundry-agent-service-3ba47ffa0f6e)
+
+=== N14 : Give me a tutorial on Microsoft Agent Framework sessions vs memory vs knowledge. ===
+# Sessions vs Memory vs Knowledge in Microsoft Agent Framework
+
+These three get conflated constantly because they all look like "the agent remembers something." They're actually three different architectural concerns, distinguished by **where the content comes from** and **how long it lives**. Here's the breakdown, based on the demonstrated constructs from the Agent Framework material.
+
+## The core distinction
+
+| | Sessions | Memory | Knowledge |
+|---|---|---|---|
+| **What it holds** | Conversational state (turns, tool calls) | The agent's own prior findings/outcomes | An external evidence corpus |
+| **Lifespan** | One interaction only | Across sessions | Persistent, independent of any session |
+| **Origin of content** | Generated during this conversation | Generated by the agent in past conversations | Never generated by the agent — it's someone else's data |
+| **Trust posture** | Authoritative for "what did we just say" | Treated as a *hypothesis to re-verify*, not a fact | Cited, not absorbed as if the agent already knew it |
+| **Construct** | `AgentThread` (naming unconfirmed — see caveat below) | A custom `AIContextProvider` that recalls prior outcomes | `AIContextProvider` backed by a search source, e.g. `TextSearchProvider` |
+
+## 1. Sessions — turn-to-turn continuity within one interaction
+
+**Mechanism it satisfies:** "conversational state persisting across turns, within one interaction."
+
+This is the narrowest of the three. It's what lets an agent remember message 3 said "use Python" when it's now processing message 7 of the *same conversation*. The defining property is negative: it must **not** survive the interaction ending, and it must not be conflated with recall across sessions — that's memory's job, not the session's.
+
+> **Naming caveat:** the construct is commonly called `AgentThread`, but some current material refers to the persisted-session wrapper as `AgentSession`. Don't pick one from memory — confirm the current SDK name against live documentation before you write it into a design doc or code.
+
+## 2. Memory — recall of the agent's own prior findings, across sessions
+
+**Mechanism it satisfies:** "recall of the agent's own prior findings across sessions."
+
+Memory is what a session deliberately isn't: it survives past one interaction. But the critical architectural rule is about *trust*, not just lifespan — content that comes back through memory originated from the agent's own past reasoning, and reasoning can be wrong. So memory should be surfaced to the agent as **something to re-verify**, not as an asserted fact the way a system prompt is. If you build memory recall that feeds prior conclusions back in as ground truth, you've built a mechanism that compounds its own past mistakes silently.
+
+The construct is a **custom `AIContextProvider`** — there's no off-the-shelf "memory store" class; you write the provider that decides what to recall and how to frame it.
+
+## 3. Knowledge — external evidence the agent cites, not memorizes
+
+**Mechanism it satisfies:** "read access to an external evidence corpus the agent must cite, not memorise."
+
+Knowledge is the odd one out because the content **never came from the agent at all** — it's a document store, a search index, a knowledge base someone else owns. Architecturally this is a retrieval/context-injection concern, kept deliberately separate from the agent's own reasoning loop, specifically so what was retrieved stays **attributable and citable** rather than getting absorbed into the response as if the model already knew it.
+
+The construct is `AIContextProvider` backed by a search source — `TextSearchProvider` is the demonstrated example.
+
+### A fourth thing that looks like knowledge but isn't: procedural knowledge (Skills)
+
+There's a related-but-distinct mechanism worth knowing about here: **procedural knowledge loaded only when relevant, not held in context permanently** — i.e., "how do I do X" rather than "what is X." That maps to `AgentSkillsProvider` + a `SKILL.md`. The distinguishing property is **progressive disclosure**: the procedure shouldn't cost context tokens when it's not in play, and it must stay declarative content the agent reads — never executable code the agent runs directly. This is a sibling to the "cite an evidence corpus" pattern, not the same thing — don't reach for a search-backed `AIContextProvider` when what you actually need is a loaded-on-demand procedure.
+
+## Why the boundaries matter (the failure mode this prevents)
+
+The reason these three are kept as separate constructs rather than one generic "give the agent context" bucket:
+
+- **Session leaking into memory**: if turn-scoped state quietly persists past the interaction, you get stale conversational context bleeding into unrelated future sessions.
+- **Memory treated as knowledge**: if the agent's own past conclusion gets fed back in with the same trust weight as a cited external document, errors compound — the agent starts "citing" its own unverified prior guess as if it were sourced fact.
+- **Knowledge treated as memory**: if retrieved documents get absorbed into the agent's apparent own knowledge instead of staying attributable, you lose the ability to say *why* the agent said something — no citation trail.
+
+## Choosing between them for a given responsibility
+
+Ask, in order:
+1. Does this need to survive past the current interaction? No → session (`AgentThread`).
+2. Yes — did the content originate from the agent's *own* past reasoning? Yes → memory (custom `AIContextProvider`, framed as re-verifiable).
+3. No — does it come from an external corpus the agent should cite? Yes → knowledge (`AIContextProvider` + `TextSearchProvider`).
+4. Is it actually a "how-to" procedure rather than factual content? → Skills (`AgentSkillsProvider` + `SKILL.md`), not knowledge.
+
+## Before you write any code
+
+Two things aren't nailed down as stable facts and need a live-docs check first:
+- Whether the session wrapper is currently named `AgentThread` or `AgentSession`.
+- The current namespace/package version for `AIContextProvider`, `TextSearchProvider`, and `AgentSkillsProvider` — none of that is asserted here on purpose, since SDK surface details go stale fast.
+
+---
+
+Want me to go one level deeper on any of these — e.g., how a memory `AIContextProvider` should frame "re-verify this" to the model, or how Skills' progressive disclosure actually avoids costing context?
+
+=== N15 : What's the exact package version, namespace, and method signature for AgentThread right now? ===
+I verified this directly by loading the actual DLL via reflection rather than trusting memory — good thing I did, because the answer isn't what the name implies anymore.
+
+**`AgentThread` doesn't exist in the current package.** It was renamed to `AgentSession` sometime between the Dec 2025 and Feb 2026 previews, before the 1.0 stable release.
+
+**Right now (verified against the installed NuGet cache and cross-checked as the latest version on NuGet.org):**
+
+- **Package**: `Microsoft.Agents.AI.Abstractions`, version **1.20.0**
+- **Namespace**: `Microsoft.Agents.AI`
+- **Type**: `AgentSession` — abstract class, base `System.Object`
+
+```csharp
+public abstract class AgentSession
+{
+    protected AgentSession();
+    protected AgentSession(AgentSessionStateBag stateBag);
+
+    public AgentSessionStateBag StateBag { get; set; }
+
+    public object? GetService(Type serviceType, object? serviceKey = null);
+    public TService? GetService<TService>(object? serviceKey = null);
+}
+```
+
+You obtain one via `AIAgent`, not by constructing it directly:
+
+```csharp
+public ValueTask<AgentSession> CreateSessionAsync(CancellationToken cancellationToken = default);
+public ValueTask<JsonElement> SerializeSessionAsync(AgentSession session, JsonSerializerOptions? options = null, CancellationToken cancellationToken = default);
+public ValueTask<AgentSession> DeserializeSessionAsync(JsonElement serializedSession, JsonSerializerOptions? options = null, CancellationToken cancellationToken = default);
+```
+
+If you're working from older docs/samples that reference `AgentThread`, `GetNewThread()`, `InMemoryAgentThread`, etc., those are stale — the equivalents now are `AgentSession`, `AIAgent.CreateSessionAsync()`, `InMemoryAgentSession`.
+
+

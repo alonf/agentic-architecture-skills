@@ -1,0 +1,1 @@
+Does this need a workflow or an agent? Run our documented approval process: validate a submitted typed form, obtain the named reviewer's recorded approval, then ask the authoritative service to apply the change and retain its audit result. On rejection, stop. The steps, reviewer identity, and authorization policy are supplied; no model interprets the form or chooses the route.

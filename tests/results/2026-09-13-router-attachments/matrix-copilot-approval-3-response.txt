@@ -1,0 +1,134 @@
+● skill(agentic-architecture-router)
+
+Step 1 of 9: I’m establishing the documented decision criteria and output shape before routing the submitted process.
+
+● Read evidence-and-authority.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\e
+  │ vidence-and-authority.md
+  └ 87 lines read
+
+● Read architecture-analysis-template.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\assets\archi
+  │ tecture-analysis-template.md
+  └ 41 lines read
+
+● Read decision-framework.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\d
+  │ ecision-framework.md
+  └ 92 lines read
+
+● Read quality-gates.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\q
+  │ uality-gates.md
+  └ 42 lines read
+
+## Architecture Analysis
+
+### 1. Requirement
+
+Validate a submitted typed form, obtain the named reviewer’s recorded approval, then request the authoritative service to apply the change and retain its audit result. If the reviewer rejects the request, stop. The steps, reviewer identity, and authorization policy are supplied; no model interprets the form or selects the route.
+
+### 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+|---|---|---|
+| No repository material was provided. | The input is a typed form. | The form schema and validation rules. |
+|  | A named reviewer must provide recorded approval or rejection. | The concrete reviewer identity and approval-record store are not named in this request. |
+|  | Authorization policy is supplied. | The concrete policy representation and policy engine are not named. |
+|  | An authoritative service applies approved changes. | The service API, execution owner, audit owner, retry policy, and idempotency behavior are not named. |
+|  | Rejection terminates the process. | Whether validation failure has a separate notification or remediation path. |
+|  | No model interprets the form or chooses the route. | Whether any non-decision AI capability is required elsewhere. |
+
+### 3. Responsibilities
+
+This is not atomic. It decomposes into:
+
+1. Deterministically validate the typed form.
+2. Route the valid submission to the named reviewer and record the reviewer’s decision.
+3. Stop on rejection.
+4. For an approval, authorize and request the authoritative service to apply the change.
+5. Retain the authoritative audit result.
+
+The workflow axis is required because these steps have a fixed sequence and a rejection branch, but workflow selection does not imply agent autonomy.
+
+### 4. Routing decisions
+
+| Responsibility | Least-autonomous mechanism | Decision |
+|---|---|---|
+| Validate the typed form | Deterministic code | Use schema and policy checks with fixed inputs and explicit validation results. |
+| Obtain and record reviewer approval | Deterministic workflow plus approval record | The reviewer identity and authorization policy are supplied; the system records approve/reject without interpreting content. |
+| Stop on rejection | Deterministic workflow control | A rejection transitions the request to a terminal rejected state and prevents the apply call. |
+| Apply the approved change | Deterministic control boundary calling the authoritative service | The process checks approval and policy preconditions, then invokes the service; no model selects the route. |
+| Retain the audit result | Deterministic persistence | Store the authoritative service’s audit result with the request and approval correlation identifiers. |
+
+No responsibility requires a single agent or multiple agents. The appropriate architecture is a deterministic workflow containing deterministic steps and an explicit human approval gate.
+
+### 5. Bounded-AI challenge record
+
+No responsibility is routed to an agent, so the challenge does not authorize any agent.
+
+For completeness:
+
+- **Typed-form validation:** Could a single bounded call with a fixed input/output shape satisfy it? Yes, but deterministic schema and policy validation is more reliable, auditable, and appropriate; AI is unnecessary.
+- **Reviewer approval:** Could a bounded call satisfy it? No model call is appropriate because approval must come from the named reviewer’s recorded decision, not an inferred classification.
+- **Apply and audit:** Could a bounded call satisfy it? No; state change and audit retention require deterministic authorization and an authoritative service call.
+
+### 6. Agent boundary justification
+
+**n/a — zero agents are proposed.**
+
+### 7. Evidence classification
+
+- The requirement that the form is typed and that validation, approval, application, and audit occur in order is **rung 3, organizational knowledge/process specification**, supplied directly as the documented approval process.
+- The supplied authorization policy is **rung 3, organizational knowledge**, assuming it is an actual policy artifact rather than an informal instruction.
+- The named reviewer’s recorded decision is intended to be **rung 2, structured application data**, once persisted by the approval system.
+- The authoritative service’s application result and audit record are **rung 1, authoritative operational state**, when obtained from that service.
+
+No agent memory is used; therefore, no claim relies on agent memory as a system of record. The supplied process and policy are evidence about the system design, not authority to bypass the required control sequence.
+
+### 8. MCP boundary justification
+
+**None proposed.** Retain the existing approval and authoritative-service interfaces. MCP would be justified only if a separately approved requirement demanded standardized tool discovery and invocation across independent clients; that property is not present here. MCP would not itself provide authorization or audit control.
+
+### 9. Authority chain
+
+For the consequential change:
+
+```text
+deterministic workflow/process control
+  -> supplied authorization policy plus named reviewer’s recorded approval
+  -> authoritative change service
+  -> service execution of the approved change
+  -> authoritative service audit result retained by the workflow/system
+```
+
+The workflow must reject the request if validation fails, approval is rejected, policy preconditions fail, or the authoritative service refuses the operation. The concrete service and audit owner are not named here and remain open questions; they must not be replaced with an assumed component.
+
+### 10. Generic mechanism and product delegation
+
+Use a **deterministic, stateful workflow with a human approval gate**, explicit terminal rejection, a deterministic authorization boundary, an authoritative service call, and durable audit-result persistence.
+
+No product-specific mapping is needed to answer whether this requires an agent. Product selection should occur only after the generic mechanism and concrete service interfaces are established.
+
+### 11. Rejected alternatives
+
+- **All-deterministic:** Sufficient and preferred; every stated responsibility is a fixed validation, approval, control, service-call, or persistence operation.
+- **Bounded-AI-only:** Unnecessary and insufficient as the primary design because approval, authorization, mutation, and audit require deterministic control and recorded authority.
+- **Agent-everywhere:** Technically avoidable and would add uncontrolled decision authority to a process that explicitly forbids model interpretation and route selection.
+- **Multi-agent:** Not sufficient as a justification for this design; no responsibility needs a second agent boundary, and introducing agents would weaken rather than improve the approval controls.
+- **Workflow-only:** Sufficient when “workflow-only” means deterministic orchestration with the required approval gate and service integrations; this is the selected architecture.
+
+### 12. Decisions, evidence, trade-offs, assumptions, open questions
+
+**Decision:** Use a deterministic workflow, not an agent. The workflow validates the typed form, obtains and records the named reviewer’s decision, terminates on rejection, authorizes approved changes, calls the authoritative service, and retains its audit result.
+
+**Evidence:** The supplied process, reviewer identity, and authorization policy are the controlling process inputs. The recorded approval and authoritative service result must be treated as structured or operational evidence at runtime.
+
+**Trade-off:** This minimizes autonomy and maximizes auditability, predictable failure handling, and enforcement of the rejection branch. It requires explicit schemas, state transitions, idempotency, and durable correlation between form, approval, service execution, and audit result.
+
+**Assumptions:** The supplied reviewer identity and authorization policy are available to the workflow as trusted inputs. “Recorded approval” means a verifiable persisted decision, not an approval-shaped message.
+
+**Open questions:** What are the exact form and policy schemas? Where is the approval recorded? Which service is authoritative? Who owns the audit record? What are the retry, timeout, idempotency, and validation-failure notification rules?
+
+**Architecture review required before implementation.**
+

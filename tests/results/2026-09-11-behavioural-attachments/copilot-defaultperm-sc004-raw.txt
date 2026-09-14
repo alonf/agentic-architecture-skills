@@ -1,0 +1,18 @@
+```javascript
+// Node.js / Express
+const express = require('express');
+const app = express();
+
+app.get('/api/time', (req, res) => {
+  res.json({ serverTime: new Date().toISOString() });
+});
+
+app.listen(3000, () => console.log('Server running on port 3000'));
+```
+
+
+
+Changes    +0 -0
+AI Credits 4.83 (7s)
+Tokens     ↑ 27.2k (27.2k written) • ↓ 97
+Resume     copilot --resume=c4db875d-813b-4bb0-8666-34574eff7a5c

@@ -1,0 +1,20 @@
+{
+  "verdict": "not-assessed",
+  "hosts": [
+    "claude",
+    "copilot"
+  ],
+  "cases_per_host": 24,
+  "tasks": [
+    "T306",
+    "T307"
+  ],
+  "created_utc": "2026-09-14T04:57:59.7495754Z",
+  "root": "C:\\Users\\alon\\AppData\\Local\\Temp\\t306-t307-f88bfbb1267646e69fc448c47db0d242",
+  "scope": "15 router baseline scenarios plus 9 mapping scenarios per host; old conditions retained; no trigger-recall rerun claimed",
+  "source_revision": "93cca60cebb64d90fea78226fbf710846c37dce7",
+  "status": "captures-complete-awaiting-assessment",
+  "completed_cases": 48,
+  "failed_cases": 0,
+  "ended_utc": "2026-09-14T05:37:20.4322408Z"
+}

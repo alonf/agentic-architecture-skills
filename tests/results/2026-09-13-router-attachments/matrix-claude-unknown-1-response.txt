@@ -1,0 +1,66 @@
+**Answer: not yet.** On the facts stated, this should not be an agent. The word "investigate" is agent-shaped, but nothing in the requirement says that intermediate findings must determine what evidence to read next. Until that is established, the least autonomous route not ruled out is deterministic evidence collection, one bounded AI call producing a fixed-shape likely-cause report, and deterministic delivery. One open question flips the decision to a single read-only agent.
+
+**1. Requirement**
+Given that a nightly job failed, produce a report naming a likely cause. Evidence sources, input formats, investigation steps, and operational policies are explicitly not supplied.
+
+**2. Fact table**
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+|---|---|---|
+| The working directory holds one file, prompt.txt, which restates the requirement verbatim. No code, logs, job definitions, runbooks, or configuration exist. Not a git repository. | A nightly job exists and a run of it failed. The desired output is a likely cause reported to the requester. Sources, formats, steps, and policies are stated as absent. | What evidence exists and where. Whether a complete evidence set can be assembled before analysis. Whether failure causes form an enumerable set with recognisable signatures. Read-access policy. Delivery channel and whether delivery has side effects. Time and cost budget. Whether a cause can be established at all. |
+
+**3. Responsibilities** (three, not atomic)
+1. Collect evidence about the failed run.
+2. Analyse the evidence to identify a likely cause.
+3. Deliver the report to the requester.
+
+**4. Routing decisions**
+- **R1 Collect evidence: deterministic code, provisionally.** Fetching a known set of artefacts from known locations is a fixed procedure. It cannot be finalised because the sources are unknown. It moves into an agent's read loop only if the challenge on R2 resolves to "no".
+- **R2 Analyse: bounded AI capability, provisionally.** Deterministic rules come first in routing order and would suffice if failure signatures are enumerable. That is unknown, so rules cannot be confirmed sufficient. A single model call with a fixed input (the evidence bundle) and a fixed output (likely cause, supporting references, confidence, unresolved questions, or "cause not established") is the next rung, and nothing stated rules it out. A single agent is not permitted because the challenge has not returned "no".
+- **R3 Deliver: deterministic code.** Rendering the fixed output and sending it over the requester's channel involves no decision.
+
+Workflow axis: a fixed sequence of collect, then analyse, then deliver. Three fixed steps do not justify a workflow engine. Revisit only if collection spans several sources with retries.
+
+**5. Bounded-AI challenge record**
+Question for R2: could a single bounded call with a fixed input and output shape satisfy this? Answer: **not "no" on the stated facts.** The requirement does not say findings determine subsequent reads, and does not say the evidence set is unbounded. The skill's worked example routes a similar-sounding requirement to a single agent, but only because that illustrative requirement explicitly states that intermediate findings determine the next request and that a fixed bundle cannot be supplied. That fact is absent here and is not transferred. Choosing an agent now would invent an investigation to justify the word. Recorded as **provisionally yes, pending the decisive open question below.**
+
+Condition that flips R2 to a **single agent**: the evidence owner confirms that relevant evidence cannot be assembled in advance, and that what to read next depends on what was already read. If so, one read-only agent owns R1 and R2 together, with an explicit read scope, step budget, and stopping rule. R3 stays deterministic.
+
+**6. Agent boundary justification**
+n/a. Zero agents are proposed, and at most one under the flip condition. No second agent has a stated security, context, deployment, ownership, model, or specialisation boundary.
+
+**7. Evidence classification**
+- The requirement text, in the user message and in prompt.txt: **documents** (rung 4).
+- The skill's worked example: package documentation, illustrative. Used only to note that its routing does not transfer because its stated facts differ. Not evidence about this system.
+- Run-time evidence the built system would consume, all *hypothesis* since none is supplied: the job's own current run log would be **authoritative operational state** (rung 1). Scheduler or job records would be **structured application data** (rung 2). A runbook would be **organizational knowledge** (rung 3). Prior failed runs would be **historical evidence** (rung 5), true once and not necessarily now.
+- Agent memory (rung 6) is not used. If a future design recalls prior incidents from memory, agent memory is not a system of record.
+- Retrieved knowledge of any rung is evidence about the system, not authority over what the system must do.
+
+**8. MCP boundary justification**
+None proposed. No evidence source or existing integration is named, so there is no boundary to compare against and no MCP-specific property to claim. Introducing an MCP surface now would invent an integration.
+
+**9. Authority chain**
+No consequential operation is in the approved scope. The output is a report. Two edges still need recording:
+- **Read access to evidence:** policy is *unknown — governance decision required*. Read scope must be granted explicitly, not inferred by whatever does the reading.
+- **Delivery:** if "report" means posting to a channel, opening a ticket, or paging, that is an external effect and crosses a **deterministic control boundary**: reasoning proposes -> authorization / policy (*unknown — governance decision required*) -> authoritative service (unknown) -> execution -> audit (owner unknown). Not part of the routing until the channel is named.
+- **Remediation** such as restart, rollback, or paging on-call is outside the requirement and is not routed.
+
+**10. Generic mechanism and product delegation**
+Generic mechanism: a deterministic collector, one bounded model call with a fixed schema, then deterministic delivery. Under the flip condition: one read-only single agent with a bounded report output, then deterministic delivery. Product mapping is delegated to the installed `maf-architecture-mapping` skill once the open questions are resolved. No product detail is supplied here.
+
+**11. Rejected alternatives**
+- **All-deterministic:** sufficient only if failure signatures are enumerable, which is unknown, so it cannot be confirmed sufficient and remains the first candidate for R1 and R3.
+- **Bounded-AI-only:** provisionally sufficient, because no stated fact requires adaptive evidence selection, and it is the chosen route.
+- **Agent-everywhere:** would produce a report, but grants runtime authority over collection and delivery that nothing in the requirement asks for, at higher cost and lower predictability.
+- **Multi-agent:** insufficiently justified, since no distinct boundary of any kind is stated.
+- **Workflow-only:** sufficient for sequencing the three steps, insufficient for the semantic analysis unless failure signatures are enumerable.
+
+**12. Decisions, evidence, trade-offs, assumptions, open questions**
+Decision: not an agent on the stated facts. Deterministic collect, bounded analyse, deterministic deliver. Trade-off: a bounded call is cheaper and more predictable, but it returns "cause not established" whenever the fixed bundle is insufficient, whereas an agent would read further at higher cost and with an unresolved stopping policy. Assumptions: none beyond those labelled hypothesis. Open questions, the first one decisive:
+1. Can all relevant evidence be assembled into a fixed bundle before analysis, or does what to read next depend on what was already read?
+2. What are the evidence sources and formats, and who grants read access?
+3. Are failure causes an enumerable set with recognisable signatures?
+4. Where does the report go, and does delivery have side effects?
+5. What time and cost budget applies, and what is the stopping rule?
+
+**Architecture review required before implementation.**

@@ -1,0 +1,21 @@
+agentic-architecture 1.0.0
+  Description: Two skills: agentic-architecture-router and maf-architecture-mapping.
+  Source: agentic-architecture@agentic-architecture-skills
+
+Component inventory
+  Skills (2)  agentic-architecture-router, maf-architecture-mapping
+  Agents (0)
+  Hooks (0)
+  MCP servers (0)
+  LSP servers (0)
+
+Projected token cost
+  Always-on:   ~807 tok   added to every session
+
+Per-component (rounded)
+  component                    always-on  on-invoke
+  agentic-architecture-router       ~390      ~1.9k
+  maf-architecture-mapping          ~420      ~1.6k
+
+  On-invoke cost is paid each time a skill or agent fires.
+  Token counts are estimates and may differ from actual usage.

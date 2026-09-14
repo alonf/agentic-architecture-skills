@@ -30,7 +30,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # The record goes to a path outside the checkout: the tree already holds committed PASS records,
         # and uploading a glob over them would present an old PASS as this run's evidence.
-        run: pwsh -File ./eng/Test-Install.ps1 -Source "${{ github.repository }}" -OutputPath "$RUNNER_TEMP/install-verification/current-run.md"
+        # The triggering commit is the expectation: the hosts clone the default branch and take no ref,
+        # so without it a push that lands mid-run, or a workflow_dispatch on another ref, could pass on
+        # content this checkout never contained. The driver fails a blocking path whose installed
+        # revision or content digest differs from this checkout.
+        run: pwsh -File ./eng/Test-Install.ps1 -Source "${{ github.repository }}" -ExpectedRevision "${{ github.sha }}" -OutputPath "$RUNNER_TEMP/install-verification/current-run.md"
 
       - name: Keep this run's record
         if: always()

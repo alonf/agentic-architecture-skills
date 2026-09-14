@@ -1,0 +1,62 @@
+ΓùÅ skill(maf-architecture-mapping)
+
+IΓÇÖm applying the mapping procedure to the approved decision, first grounding the construct choice and runtime/assurance constraints in the skill references.
+
+ΓùÅ Read construct-map.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\construct-map.md
+  Γöö 67 lines read
+
+ΓùÅ Read assurance.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\assurance.md
+  Γöö 55 lines read
+
+ΓùÅ Read runtime-and-control.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\runtime-and-control.md
+  Γöö 62 lines read
+
+ΓùÅ Read maf-surface.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\maf-surface.md
+  Γöö 116 lines read
+
+**Step 1 ΓÇö Approved mechanism decision**
+
+The router has already approved a **single adaptive, read-only agent**. It must decide at runtime which failed-batch evidence to inspect next, so this is agent territory rather than a fixed workflow or bounded model call.
+
+**Step 2 ΓÇö Responsibility-to-construct mapping**
+
+| Responsibility | Microsoft Agent Framework construct | Architectural justification |
+|---|---|---|
+| Adaptively investigate failed batch jobs | `AIAgent` with a C# method bound as a function tool | The agent must select its next investigation step from intermediate findings. That runtime autonomy is the property that justifies a single-agent construct. |
+| Read logs through the existing typed API | A **function tool over the existing typed API** | The API is callable, typed, and already owned and exposed by another team. The tool should preserve that API boundary and expose only its read-only operations to the agent. |
+| Keep the investigation read-only | A read-only tool surface and read-only downstream authorization | Mutability should be prevented by the API contract and credentials, not merely by prompting. No write or remediation functions should be included in the agentΓÇÖs tool set. |
+| Use investigation results as evidence | Tool results returned to the agent as external findings | Logs remain fresh, attributable evidence retrieved during the run rather than assumed agent knowledge. |
+
+**Why this is not MCP**
+
+The approved decision explicitly records **no MCP-specific property**. Cross-team ownership alone does not justify `McpClient`; therefore the existing typed API maps to a function tool, not an MCP client/server boundary. MCP would be appropriate only if a separate decision established a need such as runtime contract discovery, shared protocol consumption across independent hosts or agents, or an MCP-only provider.
+
+**Step 3 ΓÇö Runtime and control**
+
+The hosting choice remains an architecture question: in-process execution provides no isolation boundary, while a hosted runtime introduces session isolation and lifecycle controls. The design must separately establish:
+
+- how the agent is invoked and how its ingress contract reaches it;
+- whether investigation sessions are isolated and how long they persist;
+- which identity and read-only credentials reach the log API;
+- whether the API enforces authorization independently of agent behavior.
+
+No human approval construct is implied: this agent only reads evidence. If the scope later expands to remediation or another consequential operation, that operation needs a separately mapped per-tool approval or workflow gate.
+
+**Step 4 ΓÇö Assurance**
+
+Capture execution evidence independently of the agentΓÇÖs summary: selected tool, arguments, returned log evidence, intermediate decisions, and failures. Evaluate whether the run identified the required failure evidence, verify that the agent genuinely varies its next inspection step, and regress these checks whenever the prompt, tool contract, model, or log API changes.
+
+**Steps 5ΓÇô6 ΓÇö Dated facts and open questions**
+
+The skill surface records `AIAgent` and the client-to-agent adapter as checked on 2026-09-13, but requires re-verification against current Microsoft documentation before implementation. Framework availability is recorded as unverified. The exact function-tool binding syntax is intentionally not asserted here.
+
+Open decisions are the hosting placement, session/lifecycle policy, and the downstream identity/authorization model for the read-only typed API.
+

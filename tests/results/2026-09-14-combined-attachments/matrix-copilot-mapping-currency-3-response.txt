@@ -1,0 +1,62 @@
+ΓùÅ skill(maf-architecture-mapping)
+
+IΓÇÖm applying the mapping procedure: first the construct rows, then runtime/control and assurance, with all signatures and dated status confined to the surface reference.
+
+ΓùÅ Read runtime-and-control.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\runtime-and-control.md
+  Γöö 62 lines read
+
+ΓùÅ Read construct-map.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\construct-map.md
+  Γöö 67 lines read
+
+ΓùÅ Read maf-surface.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\maf-surface.md
+  Γöö 116 lines read
+
+ΓùÅ Read assurance.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\assurance.md
+  Γöö 55 lines read
+
+## MAF architecture mapping
+
+The approved decision maps to these constructs:
+
+| Responsibility | MAF construct | Architectural reason |
+|---|---|---|
+| One agent chooses what to do next | `AIAgent` | The responsibility requires runtime agentic decision-making rather than a fixed model call. The client-to-agent adapter is recorded in `maf-surface.md`; re-verify it before implementation. |
+| Conversational state across turns in one interaction | `AgentSession` | This provides interaction-scoped continuity. It should not be treated as durable memory or cross-session recall. The surface reference records `AgentSession` and `agent.CreateSessionAsync()` as the current C# shape, with a dated maintainer confirmation; verify that against live documentation before use. |
+| Retrieval from an external corpus | `AIContextProvider` backed by a search source such as `TextSearchProvider` | Retrieval is a context-injection responsibility, keeping corpus evidence attributable and distinct from the agentΓÇÖs reasoning or memory. These names are recorded as confirmed in `maf-surface.md`, subject to its re-verification rule. |
+| Optional fixed handoff workflow | A workflow graph with a human gate, using the handoff orchestration surface | Handoff is deterministic orchestration around agent steps, not an alternative agent-memory mechanism. The surface reference records `Microsoft.Agents.AI.Workflows` and `AgentWorkflowBuilder.CreateHandoffBuilderWith` with dated status, but that confirmation is dated 2026-09-14ΓÇölater than the supplied current dateΓÇöso treat it as pending live re-verification. Do not infer a group-chat builder name. |
+| Peer delegation where the caller has a task, not a function signature | Agent-card discovery and task delegation through A2A | A2A is the appropriate conceptual boundary for peer delegation across an ownership/deployment boundary. Binding compatibility is **not established**: discovery must verify the peerΓÇÖs ingress, wire binding, and protocol version before delegation. ΓÇ£Both support A2AΓÇ¥ is insufficient. |
+
+### Runtime and control placement
+
+- **Hosting:** The mapping does not decide in-process versus separately hosted execution. If the peer is separately hosted, the hosting boundary introduces isolation, lifecycle, ingress, and identity concerns.
+- **Ingress and binding:** A2A delegation is layered over the peerΓÇÖs ingress contract. Resolve the peerΓÇÖs accepted request/response contract and binding before attempting delegation.
+- **Isolation and lifecycle:** If a hosted runtime is selected, do not assume interaction sessions outlive the hostΓÇÖs idle/reclaim policy. The surface reference records per-session sandbox isolation as observed on 2026-09-04/05, not as a permanent SLA.
+- **Identity:** A caller identifier reaching the hosted agent does not itself authorize acting as that caller downstream. Delegated access requires an explicit consent mechanism where applicable.
+- **Human authority:** A handoff workflow gate is a workflow-level authority boundary. It is distinct from per-tool-call approval and from delegated-access consent.
+
+### Assurance
+
+Capture independent execution evidence for:
+
+- session continuity across multiple turns;
+- retrieved sources and their use in the response;
+- handoff transitions, gate decisions, and outcomes;
+- A2A agent-card discovery, negotiated binding, delegated task, and result.
+
+Evaluate each responsibility against its own requirement, then verify that observed behavior still supports the routing decision. In particular, confirm that the implementation has not silently turned peer delegation into a typed tool call, or turned the optional workflow into an always-on orchestration. Re-run these checks after changes.
+
+### Remaining uncertainties
+
+- A2A wire-binding compatibility between the intended peers remains unverified in the surface material; resolve this before relying on delegation.
+- The current framework availability and package status remain unverified in `maf-surface.md`.
+- The surface reference records several confirmations dated 2026-09-14, while the supplied current date is 2026-09-13; those facts require live re-verification rather than being treated as current.
+- The exact group-chat builder name and MCP elicitation API remain intentionally unresolved. Group chat is not needed for this decision and must not be assumed from the handoff surface.
+

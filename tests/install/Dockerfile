@@ -28,5 +28,5 @@ RUN useradd --create-home --shell /bin/bash tester
 USER tester
 WORKDIR /home/tester
 
-COPY --chown=tester:tester run-install.sh /usr/local/bin/run-install.sh
+COPY --chown=tester:tester run-install.sh digest-skills.sh /usr/local/bin/
 ENTRYPOINT ["bash", "/usr/local/bin/run-install.sh"]

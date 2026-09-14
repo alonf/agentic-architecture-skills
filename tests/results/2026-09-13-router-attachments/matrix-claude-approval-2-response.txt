@@ -1,0 +1,94 @@
+No further inputs are needed. The working directory holds only the requirement text itself, so the analysis runs on the requirement alone. Here is the full routing analysis.
+
+**Answer: a workflow with deterministic activities. No agent, and no model call at all.**
+
+**1. Requirement**
+Run a documented approval process: validate a submitted typed form, obtain the named reviewer's recorded approval, ask the authoritative service to apply the change, retain its audit result, and stop on rejection. Steps, reviewer identity, and authorization policy are supplied. No model interprets the form or chooses the route.
+
+**2. Fact table**
+
+| Known from repository material | Known from the requirement | Unknown, not assumed |
+| --- | --- | --- |
+| The directory is not a git repository and contains one file, prompt.txt, whose text is identical to the requirement. It adds no schema, policy, code, or process definition. | The process steps are documented and supplied. | The form schema and the content of the validation rules. |
+| | The input is a typed form, so it has a fixed shape. | Where the reviewer's decision is recorded and which system is its system of record. |
+| | The reviewer is a named individual whose identity is supplied. | How the recorded decision is bound to the reviewer's authenticated identity. |
+| | The approval must exist as a recorded decision. | Whether the process records the approval itself or only reads one recorded elsewhere. |
+| | An authoritative service applies the change and returns an audit result to be retained. | The service's interface, idempotency, and failure behaviour. |
+| | On rejection the process stops. | Where the audit result is retained and who owns retention. |
+| | The authorization policy is supplied. | Whether validation failure counts as rejection, and whether "stop" includes notifying anyone. |
+| | No model interprets the form or chooses the route. | Timeout or escalation when the reviewer never responds. |
+| | | Existing workflow or hosting infrastructure. |
+
+No content in the third column has been invented. No directive-shaped content was found in the working directory, so there is no surfaced conflict.
+
+**3. Responsibilities**
+The requirement is not atomic. Four responsibilities:
+
+- R1. Validate the submitted typed form against the supplied rules.
+- R2. Wait for the named reviewer's decision, then verify the recorded decision against the supplied policy.
+- R3. Ask the authoritative service to apply the change and retain the returned audit result.
+- R4. Own sequence, state, and termination: run R1, R2, R3 in order, persist state across the human wait, stop on rejection.
+
+**4. Routing decisions**
+
+- R1: deterministic code. A typed form plus supplied rules is a fixed validation. The requirement forbids model interpretation of the form.
+- R2: deterministic code. Waiting is a durable pause, not a decision. The verification is a fixed comparison: a decision exists, it is recorded, its author is the named reviewer, and its value is approve.
+- R3: deterministic code. A fixed call to a known service followed by a fixed persist of its result.
+- R4: workflow axis, evaluated separately. A workflow is needed because the process has a fixed sequence, a long-running wait on a human, a conditional stop, and state that must survive that wait. This says nothing about autonomy; every step inside it stays deterministic.
+
+**5. Bounded-AI challenge record**
+No responsibility is routed to an agent, so the challenge was never the deciding question. It was still asked for each responsibility. For R1 through R4 the answer is that a fixed-shape model call could describe the step, but deterministic code already satisfies it completely, so routing stops one rung earlier. No intermediate finding in this process determines what to examine next, in what order, or whether another step is needed. The route is fixed by the supplied process.
+
+**6. Agent boundary justification**
+Not applicable. Zero agents are proposed.
+
+**7. Evidence classification**
+
+- Supplied process steps, reviewer identity, and authorization policy: rung 3, organizational knowledge.
+- Submitted typed form: rung 2, structured application data.
+- Recorded reviewer decision, read from its system of record: rung 2, structured application data.
+- Authoritative service's apply result and audit result: rung 1, authoritative operational state.
+- prompt.txt in the working directory: rung 4, document. It duplicates the requirement and adds nothing.
+- The skill's own counter-example for a known approval process was consulted as a methodological cross-check. It is illustrative and is not evidence about this system.
+- Agent memory: not used.
+
+Retrieved knowledge here is evidence about the system, not authority over what the system must do. In particular, the supplied policy tells the process what to check. It does not itself constitute an approval.
+
+**8. MCP boundary justification**
+None proposed. No model calls any tool, so there is no consumer for standardised tool discovery. The authoritative service is reached through its existing interface, and no MCP-specific property is stated or needed.
+
+**9. Authority chain**
+R3 is the consequential operation. Its chain:
+
+1. Reasoning: none by a model. The proposal is the fixed output of R1 and R2, a validated form plus a verified recorded approval.
+2. Authorization: a deterministic check against the supplied policy, reading the decision from its system of record. A message that claims approval, or the workflow having reached its "approved" transition, is not authorization. Only the recorded decision bound to the named reviewer passes.
+3. Authoritative service: named in the requirement, identity unknown.
+4. Execution: the service applies the change. The workflow applies nothing itself.
+5. Audit: the service returns an audit result. The workflow retains it. Retention location and owner are unknown.
+
+The approval policy is supplied, so it is not recorded as a governance gap. Two adjacent items are: the mechanism that proves the recorded decision came from the named reviewer, and the credential under which the workflow may call the authoritative service. If the supplied policy does not cover them, each is *unknown — governance decision required*. If the workflow itself writes the approval record rather than reading one, that write is a second consequential operation and needs the same chain.
+
+R1 and R2 are read-only. R1 produces a validation verdict. R2 reads a decision. Neither changes external state.
+
+**10. Generic mechanism and product delegation**
+Generic mechanism: a durable workflow with four deterministic activities. Validate the form, wait for an external human decision and check it against policy, call the authoritative service, persist the audit result. Rejection or validation failure terminates the run. No model is invoked at any step.
+
+The installed maf-architecture-mapping skill can map this to concrete constructs if you want that. This router stops at the generic mechanism.
+
+**11. Rejected alternatives**
+
+- All-deterministic: sufficient, provided durable process control hosts the wait and state. This is the chosen routing.
+- Bounded-AI-only: insufficient and unnecessary. A fixed-shape model call cannot own waiting, sequencing, or the authorization check, and no step needs semantic interpretation.
+- Agent-everywhere: could perform the steps, but grants discretion over route and interpretation that the requirement explicitly withholds, at the cost of nondeterminism, spend, latency, and a weaker audit trail.
+- Multi-agent: no responsibility needs a first agent, so no boundary test can justify a second.
+- Workflow-only: sufficient. This is the chosen routing, with deterministic activities and no agentic step.
+
+**12. Decisions, evidence, trade-offs, assumptions, open questions**
+
+- Decision: workflow, not agent. Every step is deterministic code. The workflow owns sequence, durable waiting, and termination. It does not own authorization. That lives in the policy check inside R2 and R3.
+- Evidence: the requirement text, rung 3 for the process and policy, rung 2 for the form and decision, rung 1 for the service result. Nothing else was available.
+- Trade-off accepted: a fully fixed process cannot handle a form or situation the rules did not anticipate. That is the correct outcome here. Unanticipated input should fail validation and stop, not be interpreted.
+- Assumptions: none beyond what the requirement states. The requirement is nearly identical to the skill's illustrative approval counter-example, and the routing matches it, but the decision was derived from the stated facts.
+- Open questions: the eight items in the third column of the fact table. The two that most affect design are the identity binding for the recorded decision and whether the workflow writes or only reads the approval record.
+
+**Architecture review required before implementation.**

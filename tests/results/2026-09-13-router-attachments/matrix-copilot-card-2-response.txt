@@ -1,0 +1,33 @@
+● skill(agentic-architecture-router)
+
+I’m applying the card-mode architecture review: first pinning facts and authority boundaries, then routing the periodic check to the least autonomous mechanism.
+
+● Read quality-gates.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\q
+  │ uality-gates.md
+  └ 42 lines read
+
+● Read decision-card-template.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\assets\decis
+  │ ion-card-template.md
+  └ 16 lines read
+
+● Read evidence-and-authority.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\e
+  │ vidence-and-authority.md
+  └ 87 lines read
+
+# Decision Card
+
+Mode: Decision Card  
+Requirement: Every five minutes, compare a supplied numeric queue length with the configured threshold and send one alert through the existing notification service when exceeded; rule and destination are already configured.  
+Known facts: Requirement facts are the only available facts; no repository or live-system facts were supplied.  
+Unknown / assumptions: “One alert” means one notification per evaluation; deduplication, failure handling, queue source, authorization policy, and audit owner are unknown — governance decision required; responsibilities are atomicity-separated into scheduling, comparison, and notification.  
+Routed mechanism: Deterministic scheduler + numeric comparator + existing service call; bounded-AI challenge: AI adds no required judgment because inputs, rule, and destination are configured; workflow axis: scheduled workflow is appropriate.  
+Agent boundary: No agent; no security, context, deployment, ownership, model, or specialization boundary requires one. No MCP boundary; retain the existing notification-service integration because standardized multi-client tool discovery is not required.  
+Evidence classification: User requirement is direct design input; configured rule and destination are asserted by the requirement, not independently verified operational state; no retrieved knowledge or agent memory is used.  
+Authority chain: Deterministic control boundary; reasoning: threshold-exceeded proposal → authorization: unknown — governance decision required → authoritative service: existing notification service → execution: permitted alert send → audit: unknown — governance decision required.  
+Rejected alternatives: all-deterministic: sufficient and simplest; bounded-AI-only: unnecessary because no bounded judgment is needed; agent-everywhere: insufficiently justified and adds nondeterminism; multi-agent: unnecessary coordination; workflow-only: sufficient if it includes deterministic comparison and service-call controls.  
+Decision and trade-off: Use a deterministic five-minute scheduled workflow with the existing notification service; this maximizes predictability and auditability at the cost of requiring explicit duplicate, retry, authorization, and audit policies.  
+**Architecture review required before implementation.**
+

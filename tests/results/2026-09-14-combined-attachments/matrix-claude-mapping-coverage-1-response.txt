@@ -1,0 +1,49 @@
+All four reference files are read, and nothing else is needed. Here is the coverage.
+
+All twelve construct-map rows are recorded by the skill as staged live beats of the H08/W20 demo material. Four constructs the material names are recorded as not demonstrated: handoff, group chat, a harness agent, and governance middleware. No mechanism decision was supplied with the request, so this output is the coverage layer of step 2 plus the evidence marking of steps 5 and 6. It is not a per-responsibility mapping. I did not re-verify any dated fact against live documentation in this session. Every date below is as recorded in the skill's surface file.
+
+Two routing outcomes sit outside the twelve rows and are part of coverage. A deterministic decision maps to no Agent Framework construct at all. A bounded-AI decision maps to a direct structured-output chat-client call, with no agent loop, session, or hosted runtime. The surface file records the `IChatClient` abstraction as that shape, read from framework material on 2026-09-11 and marked unsure.
+
+## Row coverage
+
+Every row is demonstrated per the skill's own record. The right-hand column is the name-level evidence carried in the surface file, not a signature.
+
+| Row | Mechanism | Construct | Name and evidence status as recorded |
+| --- | --- | --- | --- |
+| 1 | Single agent deciding what to check next | `AIAgent` with a C# method bound as tool | Adapter `AIProjectClient(...).AsAIAgent(...)` read from Learn 2026-09-13, maintainer-confirmed 2026-09-14 |
+| 2 | Conversational state within one interaction | `AgentSession` | Maintainer correction 2026-09-14: created by `CreateSessionAsync()`, `AgentThread` superseded |
+| 3 | Read access to an external evidence corpus | `AIContextProvider` backed by `TextSearchProvider` | Both names confirmed 2026-09-14 |
+| 4 | Recall of the agent's own prior findings | Custom `AIContextProvider` | Base type confirmed; the recall provider is the demo's own code, not a shipped type |
+| 5 | Procedural knowledge loaded on demand | `AgentSkillsProvider` plus a skill file | Name confirmed 2026-09-14 |
+| 6 | Externally owned tool surface with a recorded MCP-specific property | `McpClient` discovery | Read 2026-09-13; `McpClientTool` derives from `AIFunction`; confirmed 2026-09-14 |
+| 7 | Justified MCP call that pauses for a human answer | MCP elicitation | Exact API surface unasserted |
+| 8 | Fixed step sequence with a gate at one step | Workflow graph with a human gate | Package `Microsoft.Agents.AI.Workflows` and `AgentWorkflowBuilder` read 2026-09-13, namespace confirmed 2026-09-14 |
+| 9 | Consequential tool call needing sign-off | `ApprovalRequiredAIFunction` | Documented as a `Microsoft.Extensions.AI` type 2026-09-13; pause surfaces as `ToolApprovalRequestContent` |
+| 10 | Second agent as a bounded capability | Agent-as-tool over its existing API; MCP variant only after the FR-008 test | No dedicated wrapping type is recorded; only the MCP variant has a named client |
+| 11 | Peer agent receiving a task, not a call | Agent-card discovery and A2A delegation | No C# type recorded; wire-binding compatibility between hosted peers unverified |
+| 12 | Where the agent executes | Hosted runtime such as Foundry's | No class or service name asserted; isolation and identity facts verified 2026-09-04/05 against one deployment |
+
+Row 6 has a companion outcome that is not a row. An externally owned API with no recorded MCP-specific property maps to a function tool over the existing API, and the output must say which applies.
+
+## Named but not demonstrated
+
+- **Handoff.** One of four multi-agent composition modes the material compares. Not staged. Documented as a workflow orchestration via `CreateHandoffBuilderWith`, read 2026-09-13 and maintainer-confirmed 2026-09-14. Name confirmation is not a demonstration.
+- **Group chat.** Also compared, also not staged. Recorded as a sibling workflow orchestration. Its C# builder name is unasserted until read from a documentation page.
+- **Harness agent.** Named on a slide only. Not implemented in the demo material.
+- **Governance middleware.** Not implemented as middleware. The demonstrated authority mechanisms are the workflow gate in row 8, the per-call approval in row 9, and the delegated-access consent flow from the runtime file. A design must name which of these three layers applies rather than cite a middleware that was never built.
+- **Protocols as a standalone topic.** Treated as decision documents in the runtime-and-control file, not as a separate runtime construct.
+
+Only agent-as-tool and A2A delegation, rows 10 and 11, are staged multi-agent modes.
+
+## Evidence limits
+
+- **Framework availability for .NET is unverified.** The sessions describe it as released. The overview page read on 2026-09-13 carried no availability statement, and its C# quick start still adds the Foundry package with a prerelease flag.
+- **No preview component is asserted stable.** Any design depending on one must state the change-or-withdrawal risk and a pinning strategy, not just the preview label.
+- **A2A binding compatibility is open.** Two hosted peers may not share JSON-RPC versus HTTP+JSON or a protocol version. The 2026-09-14 checklist confirmation did not close this.
+- **The ingress protocol name is unverified.** The demo material calls it the Responses protocol. The architectural row requires only a compatible ingress contract and makes no current name claim.
+- **The threads-and-runs "superseded" claim is an unverified source assessment.** Check migration guidance before repeating it.
+- **Platform facts came from one spike.** Per-session sandbox isolation, per-request caller identifier propagation, a correlation-id limitation, and a stale Bicep scaling description were observed 2026-09-04/05. The identifier was observed not to be a delegated-access grant. None of these is a standing SLA.
+- **Prior write-ups may carry stale names.** The session type was corrected on 2026-09-14. Do not copy a name from an earlier architecture document without re-checking the surface file.
+- **Rows 10, 11, and 12 carry no asserted C# names.** Do not fill them in from memory when producing the mapping.
+
+To turn this into the one-mapping-per-response output the skill defines, the approved decision's responsibility list with its per-responsibility routing outcome is required. Step 3 then places each on the seven runtime-and-control rows, including which of the three human-authority layers applies. Step 4 attaches the four assurance concerns: observe, evaluate against the requirement, verify the routing still holds, and regress on change.

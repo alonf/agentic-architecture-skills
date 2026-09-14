@@ -1,0 +1,36 @@
+● skill(agentic-architecture-router)
+
+● Read quality-gates.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\q
+  │ uality-gates.md
+  └ 42 lines read
+
+● Read evidence-and-authority.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\e
+  │ vidence-and-authority.md
+  └ 87 lines read
+
+● Read decision-framework.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\d
+  │ ecision-framework.md
+  └ 92 lines read
+
+● Read decision-card-template.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\assets\decis
+  │ ion-card-template.md
+  └ 16 lines read
+
+# Decision Card
+
+Mode: Decision Card  
+Requirement: Every five minutes, compare a supplied numeric queue length with the configured threshold and send one alert through the existing notification service when exceeded.  
+Known facts: The rule and destination are already configured; the input is numeric; notification service already exists.  
+Unknown / assumptions: Alert deduplication/repeat semantics, scheduler ownership, and audit retention are unspecified; atomicity: three responsibilities—schedule, compare, notify.  
+Routed mechanism: Deterministic scheduled workflow: fixed five-minute trigger, threshold comparison, then notification call; bounded-AI challenge: no, AI adds no value to fixed numeric logic.  
+Agent boundary: No agent; no MCP boundary—the existing notification-service integration is sufficient and no MCP-specific property is required.  
+Evidence classification: Requirement-provided facts require verification against authoritative operational state (rung 1); no agent memory or retrieved knowledge used.  
+Authority chain: reasoning: deterministic comparison → authorization: configured policy, otherwise unknown — governance decision required → authoritative service: existing notification service → execution: send one alert → audit: service audit, owner/retention unknown.  
+Rejected alternatives: all-deterministic: sufficient; bounded-AI-only: unnecessary; agent-everywhere: functionally sufficient but adds cost and nondeterminism; multi-agent: insufficient justification; workflow-only: sufficient if it includes the deterministic comparison and service call.  
+Decision and trade-off: Use a deterministic scheduled workflow with the existing notification service; gains predictability and low cost, while repeat/suppression and audit policy remain open decisions.  
+**Architecture review required before implementation.**
+

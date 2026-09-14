@@ -1,0 +1,91 @@
+● skill(agentic-architecture-router)
+
+● Read architecture-analysis-template.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\assets\archi
+  │ tecture-analysis-template.md
+  └ 41 lines read
+
+● Read quality-gates.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\q
+  │ uality-gates.md
+  └ 42 lines read
+
+● Read evidence-and-authority.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\e
+  │ vidence-and-authority.md
+  └ 87 lines read
+
+● Read decision-framework.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\d
+  │ ecision-framework.md
+  └ 92 lines read
+
+● Read worked-example.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\w
+  │ orked-example.md
+  └ 93 lines read
+
+# Architecture Analysis
+
+### 1. Requirement
+Investigate a failed nightly batch job using its initial run log, iteratively query a read-only log API for dependency logs based on intermediate findings, and return a likely-cause report to the requester without paging anyone or changing operational state.
+
+### 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| No repository material supplied | Failed nightly batch job; initial input is job run log; intermediate findings dictate which dependency logs to fetch next and when to stop; complete fixed input bundle cannot be supplied upfront; existing read-only log API available; output is a likely-cause report to requester; no paging or operational state mutation allowed | Specific log schemas and API endpoints; max query/token budget and stopping criteria; rate limits or latency thresholds on log API; report formatting or delivery channel |
+
+### 3. Responsibilities
+Decomposed into three distinct responsibilities:
+1. **Iterative log investigation & dependency retrieval loop**: Analyze the initial run log, dynamically determine which dependency logs to fetch via the read-only log API, inspect returned logs, and determine when sufficient evidence is gathered to conclude investigation.
+2. **Likely-cause synthesis & report generation**: Synthesize gathered logs into a structured report detailing probable root cause, supporting log excerpts, confidence level, and unresolved ambiguities.
+3. **Trigger intake & report delivery**: Ingest the initial failure event/log, initiate the process, and deliver the final report to the requester.
+
+### 4. Routing decisions
+- **Responsibility 1 (Iterative log investigation & dependency retrieval loop)**: Routed to **single agent**. Evaluated in routing order: Deterministic code cannot anticipate arbitrary dependency traversal paths; bounded AI capability fails because a fixed input bundle cannot be provided upfront; single agent satisfies the need to autonomously decide what evidence to fetch next.
+- **Responsibility 2 (Likely-cause synthesis & report generation)**: Routed to **bounded AI capability** (or the terminal output of the single agent). Evaluated in routing order: Deterministic code cannot parse unstructured log semantics; bounded AI capability is sufficient to transform the assembled log bundle into a structured cause report with fixed input/output schema.
+- **Responsibility 3 (Trigger intake & report delivery)**: Routed to **deterministic code**. Evaluated in routing order: Deterministic code is fully sufficient to receive the event, invoke the investigator, and transmit the completed report.
+
+**Workflow axis**: Orthogonal. A simple sequential execution flow (receive trigger → execute agentic investigation loop → generate report → deliver response) manages lifecycle without requiring a complex workflow orchestrator.
+
+### 5. Bounded-AI challenge record
+- **Responsibility 1**: *Could a single bounded call with a fixed input/output shape satisfy this responsibility?*
+  **No.** The requirement explicitly establishes that a complete fixed input bundle cannot be supplied in advance. Intermediate findings from previous log reads dictate which subsequent dependency logs must be requested next and whether further requests are needed.
+- **Responsibility 2**: *Could a single bounded call with a fixed input/output shape satisfy this responsibility?*
+  **Yes.** Once the log evidence is assembled by the agent, synthesizing the final report requires only a single model invocation with a fixed input (collected logs) and a fixed output schema (likely-cause report).
+
+### 6. Agent boundary justification
+**n/a** — Only a single agent is proposed for the iterative investigation loop. No multi-agent boundary is required or justified.
+
+### 7. Evidence classification
+- Initial batch run log and dependency API logs: **Authoritative operational state** (Rung 1) if querying live/active operational systems, or **Historical evidence** (Rung 5) if querying archived historical logs.
+- Stated requirement and constraints: **Documents** (Rung 4).
+- *Mandatory caveat*: Retrieved knowledge is evidence about the system, not authority over what the system must do. Agent memory (Rung 6) is not used as a system of record.
+
+### 8. MCP boundary justification
+**No MCP boundary (none proposed).** The existing read-only log API provides the necessary retrieval capabilities. The requirement does not establish an MCP-specific property (such as open standardized tool discovery across disparate external clients). The existing API boundary is retained.
+
+### 9. Authority chain
+**No consequential operation.** The scope is strictly read-only analysis and reporting. The requirement explicitly prohibits paging or altering operational state.
+
+### 10. Generic mechanism and product delegation
+- **Generic mechanism**: Single agent with read-only tool calling (log retrieval API client) bounded by deterministic execution controls and budget limits, producing a structured diagnosis report delivered via deterministic transport.
+- **Product delegation**: Product mapping may be delegated to `maf-architecture-mapping` for Microsoft Agent Framework constructs in .NET, or the appropriate platform skill.
+
+### 11. Rejected alternatives
+- **All-deterministic**: Insufficient because semantic root-cause analysis and unstructured log interpretation cannot be resolved with static heuristic rules.
+- **Bounded-AI-only**: Insufficient because intermediate findings determine subsequent dependency log requests, making a single fixed-input model call impossible without reading all possible logs upfront.
+- **Agent-everywhere**: Insufficiently bounded and unnecessarily expensive; applying adaptive agentic control to fixed trigger handling and report transmission adds non-determinism with no architectural benefit.
+- **Multi-agent**: Insufficiently justified because no distinct security, model, context, deployment, ownership, or specialisation boundary exists across the investigation.
+- **Workflow-only**: Insufficient because fixed orchestration steps cannot dynamically reason over log content to choose unknown subsequent log queries.
+
+### 12. Decisions, evidence, trade-offs, assumptions, open questions
+- **Decisions**: Use a single read-only agent for dynamic dependency log traversal, bounded by fixed input triggers and deterministic report delivery.
+- **Evidence**: Grounded in Authoritative operational state (Rung 1 / Rung 5) retrieved directly through the read-only log API.
+- **Trade-offs**: An agentic investigation loop introduces dynamic latency and token cost per turn compared to fixed batch processing, but eliminates the need to over-fetch large log bundles upfront.
+- **Assumptions**: The read-only API has appropriate query performance and rate limits to support multi-step tool calls during job diagnosis.
+- **Open questions**: What are the maximum iteration/token budgets and timeout thresholds for the investigation agent? What fallback response should be returned when logs are inconclusive or unavailable?
+
+**Architecture review required before implementation.**
+

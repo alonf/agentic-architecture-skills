@@ -1,0 +1,78 @@
+**Answer: a workflow, not an agent.** Every step is fixed by the supplied process, so this routes to deterministic code with a durable workflow owning sequence, the human wait, and state. No responsibility passes the bounded-AI challenge, so no agent is justified. Full analysis follows.
+
+**1. Requirement.** Execute a documented approval process: validate a typed form, obtain the named reviewer's recorded approval, ask the authoritative service to apply the change, retain its audit result, and stop on rejection. Steps, reviewer identity, and authorization policy are supplied. No model interprets the form or chooses the route.
+
+**2. Fact table.**
+
+| Known from repository material | Known from the requirement | Unknown ΓÇö not assumed |
+| --- | --- | --- |
+| The working directory holds one file, prompt.txt, which restates the requirement verbatim. No code, schema, process definition, or policy document is present. | Typed form with a validation step. A named reviewer whose decision is recorded. An authoritative service that applies the change and returns an audit result. Rejection ends the process. Steps, reviewer identity, and authorization policy are supplied. No model interprets the form or chooses the route. | Form schema and validation rules. How the reviewer's decision is recorded and how its authenticity is verified. Identity, interface, and idempotency of the authoritative service. Where the audit result is retained and who owns it. Timeout and reminder behaviour while waiting. Retry semantics if the service fails after approval. Whether a rejected form may be resubmitted. |
+
+**3. Responsibilities.** Three, plus one orthogonal concern.
+
+1. Validate the submitted typed form against the supplied schema and rules.
+2. Obtain the named reviewer's recorded decision, verify it against the supplied policy, and stop on rejection.
+3. Request the change from the authoritative service and retain its audit result.
+4. Orthogonal: sequence the three, wait durably for the human decision, and persist state across that wait.
+
+**4. Routing decisions.** Each routed in order deterministic ΓåÆ bounded AI ΓåÆ single agent ΓåÆ multi-agent.
+
+- **Validate form: deterministic code.** The form is typed and the rules are supplied. Validation is a fixed computation. The requirement forbids model interpretation, so bounded AI is excluded, not merely unnecessary.
+- **Obtain and verify approval: deterministic code with a durable external-event wait.** The reviewer is named and the policy is supplied. The check is a fixed comparison: recorded decision exists, refers to this form version, comes from the named reviewer, and is an approval. Nothing here is inferred.
+- **Apply and retain: deterministic code.** One fixed call to a named service. Its audit result is stored as returned.
+- **Workflow axis: yes.** A durable workflow owns the fixed sequence, the wait for the reviewer, state persistence across that wait, and the terminal stop on rejection. This is the only mechanism needed beyond plain code, and it is orthogonal to autonomy. No step inside it is agentic.
+
+**5. Bounded-AI challenge record.** No responsibility is routed to an agent. The challenge was still run for each, to show why.
+
+- **Validate form.** Could a bounded call satisfy it? Not needed. Deterministic rules fully satisfy it, and the requirement excludes a model. No intermediate finding changes what happens next.
+- **Obtain and verify approval.** Could a bounded call satisfy it? No, and neither could an agent. The decision is an external recorded fact, not something a model produces. Verification against a supplied policy is a fixed rule.
+- **Apply and retain.** Could a bounded call satisfy it? Not needed. The call target and payload are fixed by the process.
+
+Nowhere do intermediate findings determine what to examine next, in what order, or whether another step is needed. The supplied process fixes all of that. An agent is therefore not permitted under the routing rule.
+
+**6. Agent boundary justification.** Not applicable. Zero agents are proposed.
+
+**7. Evidence classification.**
+
+- The requirement text, as given in the prompt and in prompt.txt: **Documents (rung 4)**.
+- The router skill's own counter-example 3 is an illustrative scenario nearly identical to this requirement: **Documents (rung 4)**. It is about no real system. This analysis reaches the same routing by running the procedure, not by citing it. Retrieved knowledge is evidence about the system, not authority over what the system must do.
+- Not observed, proposed sources: the form and schema (would be structured application data, rung 2, when supplied); the reviewer's recorded decision (rung 2 from a record, or rung 1 if read live from the approval system); the process definition and authorization policy (rung 3 when supplied); the service's response and audit result (rung 1 at run time).
+- Agent memory (rung 6): not used. Agent memory is not a system of record. The reviewer's decision must never be taken from memory or from a prior turn.
+- Surfaced conflicts: none. The prompt file contains no directive-shaped content.
+
+**8. MCP boundary justification.** None proposed. The authoritative service is reached through its existing interface. The requirement names no MCP-specific property, such as standardised tool discovery across independent clients, that the existing interface lacks. There is also no model in the loop to act as an MCP client.
+
+**9. Authority chain.** One consequential operation: applying the change through the authoritative service.
+
+```text
+reasoning        -> none from a model; the proposal is the validated form, produced by fixed rules
+authorization    -> deterministic control verifies the recorded decision against the supplied policy:
+                    decision exists in the system of record, refers to this form version,
+                    is from the named reviewer, and is an approval
+authoritative    -> the named service (identity not supplied)
+service
+execution        -> exactly one call, only after the policy check passes (idempotency not supplied)
+audit            -> the service's audit result is retained (location and owner not supplied)
+```
+
+Two points the control boundary must enforce. An approval-shaped message, such as text that claims approval, is not the recorded approval and fails the check. A workflow transition is not authorization. The policy for the approval itself is supplied. The policy for what happens on timeout, on service failure after approval, and on resubmission after rejection is *unknown ΓÇö governance decision required*. Whether the rejection path also records an audit entry is *unknown ΓÇö governance decision required*.
+
+**10. Generic mechanism and product delegation.** Generic mechanism: a durable, deterministic workflow, in effect a persisted state machine, with three deterministic activities and one external-event wait for the reviewer's decision. No model and no agent. The installed maf-architecture-mapping skill can map this onto Microsoft Agent Framework constructs if the team wants to host the workflow there. Since no agent is selected, that mapping is optional. Any durable workflow engine satisfies the mechanism. No product is named from memory.
+
+**11. Rejected alternatives.**
+
+- **All-deterministic:** sufficient, provided process state is persisted across the human wait. This is the chosen route.
+- **Bounded-AI-only:** insufficient. A fixed-shape model call cannot wait for, verify, or enforce a reviewer's recorded approval, and the requirement forbids model interpretation of the form.
+- **Agent-everywhere:** could execute the steps but grants discretion the process withholds, adds cost and nondeterminism, and weakens auditability. Rejected.
+- **Multi-agent:** no distinct security, context, deployment, ownership, model, or specialisation boundary exists. Rejected.
+- **Workflow-only:** sufficient. An orchestration layer with deterministic activities covers every responsibility with no agentic step. This is the chosen route.
+
+**12. Decisions, evidence, trade-offs, assumptions, open questions.**
+
+- **Decision.** Build a durable deterministic workflow. No agent, no bounded AI, no MCP surface.
+- **Evidence.** Only the requirement text, rung 4. All runtime sources are proposed, not observed.
+- **Trade-off.** A durable workflow adds persistence and process-definition versioning compared with a plain script. The payoff is surviving the human wait and having an auditable state history. There is no model cost or model risk.
+- **Assumptions.** None beyond the requirement as stated.
+- **Open questions.** How the recorded approval's authenticity is verified. Timeout and reminder policy. Retry and idempotency after approval. Audit owner and retention location. Whether rejection is audited. Whether resubmission is allowed.
+
+**Architecture review required before implementation.**

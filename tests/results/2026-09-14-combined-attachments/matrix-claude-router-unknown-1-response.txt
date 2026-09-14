@@ -1,0 +1,99 @@
+The only repository material is a single file that restates the requirement verbatim, so the analysis below is grounded in the requirement text alone. Here is the decision.
+
+**Short answer: not on the facts supplied.** The requirement reads as agentic, but it states nothing that requires adaptive control. Route it to a bounded AI capability over a fixed evidence bundle, wrapped in deterministic collection and delivery. One missing fact would change that answer: whether the relevant evidence can be enumerated before the run, or whether each read depends on what the previous read showed. Only the second case justifies a single read-only investigator agent.
+
+**1. Requirement**
+
+Given a failed nightly job, determine a likely cause and report it. The requester states that no evidence sources, input formats, investigation steps, or operational policies have been supplied.
+
+**2. Fact table**
+
+| Known from repository material | Known from the requirement | Unknown, not assumed |
+| --- | --- | --- |
+| The working directory holds one file, `prompt.txt`, whose content is the requirement text verbatim. No job definition, schedule, log, runbook, or API description is present. | A nightly job exists. One run failed. The desired output is a report naming a likely cause. Evidence sources, input formats, investigation steps, and operational policies are explicitly not supplied. | What the job does and what runs it. What failure evidence exists and in what form. Whether that evidence can be gathered as one fixed bundle or must be selected step by step. Whether a failure taxonomy or runbook exists. Who receives the report and through what channel. What read access is permitted. Whether any action beyond reporting is wanted. Investigation budget and stopping rule. Authorization policy for any action. |
+
+Surfaced conflicts: none. The file contains no directive addressed to the assistant.
+
+**3. Responsibilities**
+
+The requirement is not atomic. It decomposes into three responsibilities.
+
+- **R1. Detect the failure and collect the initial evidence.**
+- **R2. Determine a likely cause from that evidence.**
+- **R3. Produce and deliver the report.**
+
+**4. Routing decisions**
+
+- **R1: deterministic code.** Reading a scheduler status, an exit code, and the run's own log from known locations is a fixed operation once the sources are named. No content interpretation is needed to perform the fetch.
+- **R2: bounded AI capability.** Fixed input is the evidence bundle from R1. Fixed output is a likely cause, evidence references, a confidence statement, unresolved questions, or an explicit "insufficient evidence" result. If a failure-signature table exists, a deterministic match runs first and the model call handles only what it misses. A single agent is not selected; see section 5.
+- **R3: deterministic code.** Schema validation of the R2 output, then delivery to the requester over the existing channel.
+- **Workflow axis.** A fixed linear sequence, R1 then R2 then R3, with a retry on transient collection failure. This fits a scheduled pipeline step and does not justify a workflow engine. The sequence is unchanged even if R2 later becomes an agent.
+
+**5. Bounded-AI challenge record**
+
+R2 is the only candidate. The question: could a single bounded call with fixed input and output satisfy "determine a likely cause"? The answer is not shown to be no. The requirement does not state that intermediate findings determine what to read next, and it does not state that the evidence cannot be bundled in advance. Complexity and free-text logs are not, by themselves, grounds for failing the challenge. The agent is therefore not permitted on the current facts.
+
+The challenge fails, and a single read-only agent becomes justified, only if the evidence owner confirms two things. First, that relevant dependency evidence cannot be enumerated before the run. Second, that each read depends on the previous result. For contrast, the skill's illustrative worked example routes a near-identical requirement to an agent precisely because that requirement states this property. Yours does not.
+
+**6. Agent boundary justification**
+
+Not applicable. Zero agents are proposed, with at most one conditional agent. No second agent has a named security, context, deployment, ownership, model, or specialisation boundary.
+
+**7. Evidence classification**
+
+- **Requirement text**, in the prompt and in `prompt.txt`: Documents, rung 4.
+- **Job logs, scheduler state, dependency logs, metrics**: not observed, proposed sources. If supplied later, a current run's log or scheduler state would be Authoritative operational state, rung 1. Prior runs would be Historical evidence, rung 5. A runbook or failure taxonomy would be Organizational knowledge, rung 3. Tickets would be Documents, rung 4.
+- **Skill reference material** read during this analysis is method guidance and illustrative only. It contributes no fact about your job.
+- **Agent memory**: not used. If a future design recalls past investigations, agent memory is not a system of record.
+- **Retrieved knowledge caveat**: any runbook or prior-incident text a future design retrieves is evidence about the system, not authority over what the system must do.
+
+**8. MCP boundary justification**
+
+None proposed. No evidence source or existing integration is named, so no MCP-specific property can be identified. If an existing log or scheduler API exists, retain it.
+
+**9. Authority chain**
+
+In scope there is no consequential action. The stated output is a report to the requester. Reads still require access whose scope is unknown - governance decision required.
+
+Out of scope, recorded so nobody adds it silently: rerunning the job, paging, opening a ticket, or rolling back. Each crosses a deterministic control boundary with five stages.
+
+1. Reasoning proposes the action.
+2. Authorization: unknown - governance decision required.
+3. Authoritative service: unknown, whether scheduler, paging, or ticketing.
+4. Execution only if authorized.
+5. Audit: owner unknown.
+
+If the report channel itself pages people, delivery becomes consequential and needs the same chain.
+
+**10. Generic mechanism and product delegation**
+
+The generic mechanism is a deterministic evidence collector, an optional deterministic signature match, one bounded analysis call with a fixed output schema, and deterministic validation and delivery. The conditional variant adds one read-only investigator with bounded reads, a run budget, and a stopping rule, only if the condition in section 5 is confirmed. Product mapping is delegated to the installed `maf-architecture-mapping` skill after this decision is reviewed and the open questions are answered. No product is named here.
+
+**11. Rejected alternatives**
+
+- **All-deterministic**: sufficient for R1 and R3, and sufficient for R2 only with a complete failure-signature table, which is not supplied, so insufficient as the sole route.
+- **Bounded-AI-only**: sufficient for R2 if the evidence bundle can be fixed in advance, which is the chosen route. It becomes insufficient only if evidence selection depends on findings.
+- **Agent-everywhere**: could cover all three responsibilities, but adds adaptive control to fixed collection and delivery at extra cost and lower predictability. Rejected.
+- **Multi-agent**: no responsibility names a distinct boundary, so a second agent adds coordination with no justification. Rejected.
+- **Workflow-only**: sufficient for sequencing, retry, and delivery, and insufficient alone for interpreting unstructured failure evidence without a rule table. It wraps R2 rather than replacing it.
+
+**12. Decisions, evidence, trade-offs, assumptions, open questions**
+
+**Decision.** Not an agent on the current facts. Use bounded AI over a fixed bundle with deterministic code around it. Upgrade to one read-only agent only on confirmation that evidence selection depends on findings.
+
+**Evidence relied on.** The requirement text only, rung 4.
+
+**Trade-off.** The bounded route is cheaper, predictable, and auditable, but it returns "insufficient evidence" whenever the fixed bundle misses the cause. The agent route finds more but costs more, is less predictable, and needs access scope, budget, and stopping policy set first.
+
+**Assumptions, labelled.** The job leaves retrievable failure evidence. This is an assumption. The report goes to a person rather than to a system that acts on it. This is an assumption.
+
+**Open questions to answer before review.**
+
+- Can the relevant evidence be enumerated in advance, or does each read depend on the previous one? This single answer decides bounded AI versus agent.
+- What are the evidence sources, their formats, and their access rules?
+- Does a failure taxonomy or runbook exist that a deterministic first tier could use?
+- Who receives the report, over what channel, and does that channel page anyone?
+- Is any action beyond reporting wanted, and if so, who authorizes it?
+- What run budget and stopping rule apply if an agent is later justified?
+
+**Architecture review required before implementation.**

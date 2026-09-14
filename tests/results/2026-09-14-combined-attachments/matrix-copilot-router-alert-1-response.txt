@@ -1,0 +1,83 @@
+ΓùÅ skill(agentic-architecture-router)
+
+IΓÇÖll route this through the least-autonomy architecture decision process.
+
+ΓùÅ Read decision-framework.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\decision-framework.md
+  Γöö 92 lines read
+
+ΓùÅ Read architecture-analysis-template.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\assets\architecture-analysis-template.md
+  Γöö 41 lines read
+
+ΓùÅ Read counter-examples.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\counter-examples.md
+  Γöö 75 lines read
+
+ΓùÅ Read evidence-and-authority.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\evidence-and-authority.md
+  Γöö 94 lines read
+
+ΓùÅ Read quality-gates.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\quality-gates.md
+  Γöö 42 lines read
+
+## Architecture decision
+
+1. **Requirement**  
+   Every five minutes, compare a supplied numeric queue length with an already configured numeric threshold. When the value exceeds the threshold, send one alert to the already configured destination through the existing notification service.
+
+2. **Fact table**
+
+   | Known from repository material | Known from the requirement | Unknown ΓÇö not assumed |
+   |---|---|---|
+   | No repository material was supplied or inspected. | Queue length and threshold are numeric; evaluation occurs every five minutes; the rule, destination, and notification service already exist; one alert is sent on exceedance. | Alert deduplication, retry/error policy, authorization policy, notification-service audit ownership, scheduling host, and whether repeated alerts during sustained excess are intended. |
+
+3. **Responsibilities**  
+   - Trigger the evaluation on the fixed five-minute schedule.  
+   - Compare supplied queue length to the configured threshold.  
+   - Conditionally dispatch one alert through the existing service and retain an audit result.
+
+4. **Routing decisions**  
+   - **Scheduling:** deterministic code or scheduler; the cadence is fixed.  
+   - **Comparison:** deterministic code; numeric `queueLength > threshold` is a fixed rule.  
+   - **Dispatch:** deterministic conditional service call, behind policy validation; no interpretation or adaptive choice is needed.  
+   - **Workflow axis:** a fixed scheduled sequence is sufficient. A separate workflow engine is unnecessary unless operational needs such as durable retries or deduplication require it.
+
+5. **Bounded-AI challenge record**  
+   No responsibility is routed to an agent. A bounded model call could perform the comparison, but it would add uncertainty without providing capability beyond a deterministic numeric rule.
+
+6. **Agent boundary justification**  
+   **n/a** ΓÇö zero agents are proposed.
+
+7. **Evidence classification**  
+   - Requirement text: **Documents (rung 4)**.  
+   - Actual queue measurement, configured threshold, notification configuration, authorization policy, service response, and audit data: **not observed ΓÇö proposed runtime sources**.  
+   - The routing framework was used as a decision method, not as evidence about this system. No agent memory or retrieved system knowledge was used.
+
+8. **MCP boundary justification**  
+   **None proposed.** Retain the existing notification-service integration; no requirement states an MCP-specific need such as standardized tool discovery across independent clients.
+
+9. **Authority chain**  
+   Deterministic comparison ΓåÆ authorization/policy validation (**unknown ΓÇö governance decision required**) ΓåÆ existing notification service ΓåÆ alert dispatch ΓåÆ audit result retained by the audit owner (**unknown**). The configured destination does not itself establish dispatch authorization.
+
+10. **Generic mechanism and product delegation**  
+    Use a **deterministic scheduled rule with a conditional service call**. No product selection is needed for this architecture decision.
+
+11. **Rejected alternatives**  
+    - **All-deterministic:** sufficient; every stated responsibility has fixed inputs, rules, and actions.  
+    - **Bounded-AI-only:** insufficiently justified; it can compare values but adds nondeterminism for no stated benefit.  
+    - **Agent-everywhere:** technically possible but unnecessary, granting discretionary control where none is needed.  
+    - **Multi-agent:** not justified; there are no distinct decision, context, security, or specialization boundaries.  
+    - **Workflow-only:** sufficient only insofar as it hosts deterministic scheduling, comparison, and dispatch; it does not require an agentic step.
+
+12. **Decision, evidence, trade-offs, assumptions, open questions**  
+    **Decision:** This should **not** be an agent. Implement it as deterministic scheduled automation using the existing notification service. This is simpler, predictable, directly testable, and preserves strict threshold behavior. The key open governance decision is the policy that authorizes sending alerts; define retry, deduplication, and sustained-threshold behavior if they are not already part of the configured rule.
+
+**Architecture review required before implementation.**
+

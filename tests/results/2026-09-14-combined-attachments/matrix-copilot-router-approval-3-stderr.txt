@@ -1,0 +1,6 @@
+
+
+Changes    +0 -0
+AI Credits 0.65 (33s)
+Tokens     Γåæ 59.4k (36.1k cached, 23.2k written) ΓÇó Γåô 2.3k (283 reasoning)
+Resume     copilot --resume=7833b4c6-7db7-49e4-8249-99c5225b57bc

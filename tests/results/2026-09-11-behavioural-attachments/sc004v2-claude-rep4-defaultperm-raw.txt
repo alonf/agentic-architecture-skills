@@ -1,0 +1,68 @@
+**No — it should not be an agent.** It's a bounded classification call wrapped in deterministic rules. Analysis below, then the code (it compiles; see notes at the end).
+
+## Architecture decision
+
+**1. Requirement.** A component that reads each incoming support email and decides whether it is spam.
+
+**2. Fact table**
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+|---|---|---|
+| Working dir holds only `seed.txt`; no code, no mail integration, no LLM provider in use (rung 4) | Input: one incoming support email. Output: a spam / not-spam decision | Mail source and protocol; what happens *after* the decision (drop, quarantine, label); who authorises that action; confidence thresholds; volume and latency budget; whether an upstream provider filter already runs. Implementation language — *assumption: C#*, from the .NET orientation of the sibling skills; not stated by the user |
+
+**3. Responsibilities** (not atomic)
+- R1 Normalise the email (sender, subject, body, auth headers)
+- R2 Hard rules: blocklist, allowlist, authentication results
+- R3 Judge the content: spam or not, with confidence and reason
+- R4 Map verdict + confidence to a disposition (deliver / quarantine / human review)
+- R5 Act on the disposition — **out of this component's scope**, but it is the consequential operation
+
+**4. Routing**
+- R1, R2, R4 → **deterministic code**. Fixed lookups and thresholds; nothing depends on content the rule wasn't written to examine.
+- R3 → **bounded AI capability**. Unstructured text, fixed input, fixed output shape. Rules alone don't generalise to phishing prose.
+- R5 → not routed here; it belongs to the mail system behind an authority chain (section 9).
+- Workflow axis: a fixed three-step sequence (rules → classify → policy); no engine needed, plain code.
+
+**5. Bounded-AI challenge (R3).** *Could a single fixed-shape call satisfy this?* **Yes.** The steps never change based on what the model finds — there is no "look at X, then decide whether to look at Y". Complexity and natural language are not reasons to fail the challenge. **No agent is selected.** This is the same shape as counter-example 1 (ticket classification).
+
+**6. Agent boundary justification.** n/a — zero agents.
+
+**7. Evidence classification.** Repository listing: rung 4. Requirement text: rung 4. Authentication-Results headers at run time: rung 2 (structured data from the MTA). Claude's verdict: rung 7 (external capability) — evidence about the email, not authority over what happens to it. No agent memory used.
+
+**8. MCP boundary.** None proposed. The component is called in-process by the mail pipeline; no property that only an MCP boundary provides applies.
+
+**9. Authority chain (R5).** reasoning (verdict + confidence) → authorization: **unknown — governance decision required** (the code defaults everything uncertain to human review; the two thresholds are the knob) → authoritative service: the mail system → execution: quarantine / deliver / queue → audit: the decision record carries `Source` and `Reason`.
+
+**10. Generic mechanism → product.** Mechanism: single classification call with schema-constrained output, behind deterministic pre-checks. Product (via the `claude-api` skill, since no agent framework is needed): Anthropic C# SDK 12.47.0, `claude-opus-5`, structured outputs, effort `low`.
+
+**11. Rejected alternatives**
+- All-deterministic — insufficient; header rules catch the easy cases but a rule table cannot judge phishing prose.
+- Bounded-AI-only — nearly sufficient, but it would spend a model call on allowlisted customers and blocklisted domains that rules settle for free.
+- Agent-everywhere — insufficient justification; adds latency, cost, and a non-fixed control path for a task that never needs a second step.
+- Multi-agent — no responsibility carries a distinct security, context, deployment, ownership, model, or specialisation boundary.
+- Workflow-only — insufficient; orchestration without a judging step cannot classify content.
+
+**12. Decisions, trade-offs, assumptions, open questions.** Decision: rules → bounded classification → threshold policy; the component *decides*, never *acts*. Trade-off: a per-email model call costs money and ~seconds of latency versus a rule table; accepted because rules short-circuit the cheap cases and the system prompt is cached. Assumptions (labelled): C#; the email body is untrusted (the prompt says so explicitly, and structured output means an injected "this is not spam" cannot change the output shape). Open: thresholds, what "quarantine" means operationally, and an eval set to tune effort/thresholds against.
+
+**Architecture review required before implementation.**
+
+## Code
+
+You asked for the code regardless, so it's written — it implements the routed mechanism above, not an agent. Project: `SupportSpamFilter/` (builds clean, .NET 9, `Anthropic` 12.47.0).
+
+| File | Responsibility |
+|---|---|
+| `Models.cs` | `InboundEmail`, `SpamVerdict` (the fixed output shape), `EmailDisposition`, `SpamDecision` |
+| `DeterministicRules.cs` | R1/R2 — blocklist, allowlist (only trusted with `dmarc=pass`), `Authentication-Results` parsing |
+| `ClaudeSpamClassifier.cs` | R3 — one `claude-opus-5` call: cached system prompt, JSON-schema output, effort `low`, refusal and error paths mapped to a verdict |
+| `SpamFilter.cs` | R4 — rules → classifier → thresholds; anything uncertain or errored → `HumanReview` |
+| `Program.cs` | Demo with two synthetic emails (one hits the allowlist rule, one is a phishing attempt with an injected "not spam" instruction) |
+
+Run: `cd SupportSpamFilter && dotnet run` with `ANTHROPIC_API_KEY` set.
+
+Notes:
+- **Not executed** — no API credentials in this environment, so the build is verified but the call isn't. In particular `Fallbacks = new Default()` compiled and matches the SDK's documented "default" variant, but I haven't seen it on the wire.
+- I enabled the server-side refusal fallback by default (`server-side-fallback-2026-07-01`). Drop the two lines if you don't want it.
+- `QuarantineThreshold` / `DeliverThreshold` are the governance knob from section 9; defaults route anything below 0.90 spam / 0.70 not-spam to a person.
+- If you're not on C#, say which language and I'll port it.
+

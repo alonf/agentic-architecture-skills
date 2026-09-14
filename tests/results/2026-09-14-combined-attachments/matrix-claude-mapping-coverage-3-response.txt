@@ -1,0 +1,44 @@
+The four reference files give me everything the report needs. The working directory holds only the prompt, so no architecture decision document was supplied. I'll report row-level coverage under that stated limit rather than guess a decision.
+
+**Outcome.** All twelve construct-map rows are staged demonstrations in the H08/W20 material, according to the skill's own construct map. Handoff, group chat, a harness agent, and governance middleware sit outside those twelve rows. The material names them but does not demonstrate them. No architecture decision document was found in the working directory, so this is coverage of the rows themselves, not a per-responsibility mapping. The skill's step 1 stays open until that decision record is supplied.
+
+## Coverage of the twelve rows
+
+Every row below is marked demonstrated by the construct map. The last column carries the dated evidence limit from the surface file, which is the only file allowed to hold names, signatures, or availability claims.
+
+| Row | Mechanism | Construct | Evidence limit from the surface file |
+| --- | --- | --- | --- |
+| 1 | Single agent deciding at run time what to check next | `AIAgent` with a C# method bound as its tool | Adapter `AIProjectClient(...).AsAIAgent(...)` read from docs 2026-09-13, maintainer-confirmed 2026-09-14. .NET availability status unverified. |
+| 2 | Conversational state within one interaction | `AgentSession` | Corrected 2026-09-14: created by `CreateSessionAsync`; `AgentThread` superseded. |
+| 3 | External evidence corpus, cited not memorised | `AIContextProvider` backed by `TextSearchProvider` | Both names confirmed 2026-09-14. |
+| 4 | Recall of the agent's own prior findings | Custom `AIContextProvider` | Base type confirmed 2026-09-14. The recall provider is demo-specific code, not a named framework construct. |
+| 5 | Procedural knowledge loaded only when relevant | `AgentSkillsProvider` plus a `SKILL.md` | Confirmed 2026-09-14. |
+| 6 | Tool surface owned elsewhere, with a recorded MCP-specific property | `McpClient` discovery against an MCP server | `McpClientTool` derives from `AIFunction`, read 2026-09-13, confirmed 2026-09-14. |
+| 7 | Already-justified MCP call pausing for a human answer | MCP elicitation | Staged as a beat, but the exact elicitation API surface is deliberately unasserted. |
+| 8 | Fixed step sequence with an authorization boundary at one step | Workflow graph with a human gate | `Microsoft.Agents.AI.Workflows` via `AgentWorkflowBuilder`, read 2026-09-13, confirmed 2026-09-14. |
+| 9 | One consequential tool call needing sign-off | `ApprovalRequiredAIFunction` | A `Microsoft.Extensions.AI` type; paused call surfaces as `ToolApprovalRequestContent`. Read 2026-09-13, confirmed 2026-09-14. |
+| 10 | Second agent as a bounded capability | Agent-as-tool over the existing callable API; MCP only after a separate FR-008 pass | No dedicated construct name asserted beyond `McpClient` for the MCP variant. Transport is not chosen by the row. |
+| 11 | Peer agent owned elsewhere receiving a task description | Agent-card discovery and A2A delegation | Wire-binding compatibility between two hosted peers is unverified and retained open as of 2026-09-14. |
+| 12 | Where the agent executes | Hosted runtime such as Foundry's | Per-session isolation and identity propagation observed on a live deployment 2026-09-04 and 05. Flagged as one spike's finding, not a standing SLA. |
+
+Two router outcomes map to no row at all. A deterministic decision has no MAF construct. A bounded-AI decision maps to a direct structured-output chat-client call, checked 2026-09-11 from a reading of the material rather than a running deployment, with GA or preview status unconfirmed.
+
+## Named but not demonstrated
+
+- **Handoff.** One of four multi-agent composition modes the material compares on slides. Only agent-as-tool and A2A delegation are staged. Handoff is documented as a workflow orchestration, and the builder name was maintainer-confirmed on 2026-09-14. A confirmed documentation name is not a demonstration. Treat it as slide-only.
+- **Group chat.** Also slide-only, a sibling workflow orchestration to handoff. Its C# builder name is not asserted anywhere in the skill and must be read from a live documentation page before use.
+- **Harness agent.** Named on a slide. Not implemented in the demo material. No construct or name is attached to it.
+- **Governance middleware.** Not implemented as middleware. The demonstrated authority mechanisms are the workflow gate in row 8, the per-call approval in row 9, and the delegated-access consent flow described in the runtime-and-control reference. A design that asks for governance middleware has no demonstrated coverage and should be re-expressed as one of those three layers.
+- **Protocols as a standalone topic.** Treated as decision documents, not a runtime construct, so no row exists for it.
+
+## Evidence limits
+
+- **No decision record was supplied.** Without it I cannot say which rows the approved architecture touches, whether any responsibility was routed to deterministic or bounded AI, or whether an MCP claim has its FR-008 property recorded. A per-responsibility mapping needs that record.
+- **"Demonstrated" means staged in the H08/W20 material as recorded by the construct map.** I did not run or inspect the companion demo repository, so I cannot independently confirm any beat executed.
+- **Framework availability for .NET is unverified.** The overview page carried no availability statement as of 2026-09-13, and its C# quick start still adds the Foundry package with a prerelease flag.
+- **A date discrepancy exists.** The surface file records maintainer confirmations dated 2026-09-14, which is after today's date of 2026-09-13. Confirm those entries before treating them as settled.
+- **Preview components carry unstated risk.** The surface file asserts no preview component as stable. Any design leaning on one must state the change risk and a pinning strategy, not just the preview label.
+- **Two protocol facts remain open.** A2A wire-binding compatibility between hosted peers is unverified, and the ingress protocol name used by the demo material has not been re-checked since 2026-09-04.
+- **Demonstration is not assurance.** A staged beat shows a construct exists, not that a specific design behaves. Observe, evaluate, verify-routing, and regress still apply after mapping.
+
+To turn this into a concrete mapping, supply the router's decision record with one routed mechanism per responsibility. The skill will then map only the rows that record actually needs, and will say plainly where a responsibility lands on no row.

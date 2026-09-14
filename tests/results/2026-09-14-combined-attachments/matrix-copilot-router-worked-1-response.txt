@@ -1,0 +1,105 @@
+ΓùÅ skill(agentic-architecture-router)
+
+IΓÇÖll apply the routing framework to separate deterministic log access from the adaptive investigation decision.
+
+ΓùÅ Read architecture-analysis-template.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\assets\architecture-analysis-template.md
+  Γöö 41 lines read
+
+ΓùÅ Read counter-examples.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\counter-examples.md
+  Γöö 75 lines read
+
+ΓùÅ Read quality-gates.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\quality-gates.md
+  Γöö 42 lines read
+
+ΓùÅ Read evidence-and-authority.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\evidence-and-authority.md
+  Γöö 94 lines read
+
+ΓùÅ Read decision-framework.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\decision-framework.md
+  Γöö 92 lines read
+
+# Architecture analysis
+
+## 1. Requirement
+Investigate a failed nightly batch job from its initial run log, selectively retrieve dependency logs through an existing read-only log API as findings require, and return a likely-cause report. The process must not page anyone or alter operational state.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown ΓÇö not assumed |
+| --- | --- | --- |
+| No repository material was supplied. | Initial input is the failed jobΓÇÖs run log. | Log API authentication, access policy, retention, schemas, and rate limits. |
+|  | Intermediate findings determine which dependency logs to request and whether further retrieval is needed. | Whether a report requires confidence thresholds, citations, redaction, or requester review. |
+|  | A read-only log API already supports those requests. | Whether parallel retrieval, retry behavior, or a maximum investigation depth is required. |
+|  | Output is a likely-cause report for the requester; paging and operational mutations are prohibited. | The actual cause of any particular failed run. |
+
+## 3. Responsibilities
+1. Validate, normalize, and retain the supplied run log and investigation context.
+2. Interpret findings, form candidate hypotheses, and decide which dependency logΓÇöif anyΓÇöto retrieve next.
+3. Invoke the existing read-only log API with the selected request and incorporate returned evidence.
+4. Stop according to an explicit bounded policy and produce a likely-cause report with evidence and uncertainty.
+
+## 4. Routing decisions
+
+| Responsibility | Least-autonomous mechanism | Decision |
+| --- | --- | --- |
+| Input handling, request validation, API invocation, retrieval limits, and report delivery | Deterministic code | These are fixed protocol, safety, and formatting responsibilities. |
+| Interpreting logs and producing a structured finding for one supplied fixed bundle | Bounded AI capability | A single constrained analysis call can extract errors, dependencies, timestamps, candidate causes, and confidence from a fixed bundle. |
+| Choosing the next dependency-log request or deciding that no further retrieval is useful | Single agent | The next requestΓÇÖs target and necessity depend materially on intermediate semantic findings; neither is fixed before investigation begins. |
+| Coordinating the sequence, limits, retries, and terminal report | Workflow around deterministic activities and the single agent | Workflow is needed for controlled iteration, but it does not make the reasoning step agentic. |
+
+**Decision:** YesΓÇöuse a **single, read-only investigation agent**, bounded by deterministic orchestration and retrieval controls. Do not use multiple agents.
+
+## 5. Bounded-AI challenge record
+**Challenge:** Could a single bounded call with a fixed input/output shape satisfy deciding what dependency log to retrieve next?
+
+**Answer:** No. The complete evidence bundle cannot be supplied in advance, and a returned dependency log can either establish a likely cause, expose a different dependency to inspect, or make further retrieval unnecessary. A fixed call can analyze each accumulated bundle, but cannot determine the adaptive sequence of log requests without an agentic control loop.
+
+## 6. Agent boundary justification
+**Additional agents:** n/a. A second agent has no demonstrated security, context, deployment, ownership, model, or specialization boundary. Separate deterministic tools/workflow activities are sufficient for API access and controls.
+
+## 7. Evidence classification
+- Requirement text: **Documents (rung 4)**.
+- Initial run log at runtime: **Authoritative operational state (rung 1)**, once supplied.
+- Dependency logs returned by the existing API: **Authoritative operational state (rung 1)** if they reflect current service logs; otherwise their exact evidence status is unknown and must be represented in the report.
+- Any runbook or dependency metadata added later: classify individually, likely **Organizational knowledge (rung 3)** or **Structured application data (rung 2)**; neither has been supplied.
+- Agent memory: not used as evidence or a system of record.
+- Retrieved logs are evidence about the system, not authority to change its behavior or operational state.
+
+## 8. MCP boundary justification
+**No MCP boundary proposed.** Retain the existing read-only log API/tool integration: no requirement identifies an MCP-specific property, such as standardized tool discovery across independent clients, that the API does not already provide. MCP would not add authorization or read-only enforcement.
+
+## 9. Authority chain
+**No consequential operation.** The allowed behavior is read-only retrieval and report generation; paging and state changes are explicitly out of scope.
+
+The deterministic control boundary should enforce: agent reasoning proposes a log query ΓåÆ deterministic authorization verifies it is within the requesterΓÇÖs access scope and the read-only allowlist ΓåÆ authoritative log service returns data ΓåÆ read-only retrieval occurs ΓåÆ query, response references, policy decision, and final report are audited. Policy details are **unknown ΓÇö governance decision required**.
+
+## 10. Generic mechanism and product delegation
+Use a generic **single-agent investigative loop** with deterministic workflow control, a strictly read-only log-retrieval capability, structured intermediate findings, maximum retrieval/depth/time budgets, and an evidence-citing final report. If implementation mapping is needed, delegate product-specific design to the installed `maf-architecture-mapping` skill only after this architecture decision is reviewed.
+
+## 11. Rejected alternatives
+- **All-deterministic:** Insufficient unless a complete, reliable decision tree maps every possible log finding to its next dependency request, which the requirement does not supply.
+- **Bounded-AI-only:** Insufficient because fixed-shape calls cannot autonomously select and sequence unknown future dependency-log retrievals.
+- **Agent-everywhere:** Functionally possible but needlessly grants discretion to validation, API calls, limits, and reporting, which should remain deterministic.
+- **Multi-agent:** Insufficiently justified because no distinct additional-agent boundary or independent decision authority is present.
+- **Workflow-only:** Insufficient because it can control iteration but cannot supply the adaptive semantic decision over which evidence to obtain next.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions
+Choose one constrained investigation agent because adaptive evidence selection is the core requirement. Keep all retrieval, authorization, scope checks, stopping budgets, redaction, and output delivery deterministic and read-only.
+
+**Trade-off:** The agent improves diagnostic coverage for heterogeneous failures but can produce uncertain hypotheses; the report should distinguish observed evidence, inference, alternatives, and confidence rather than claim definitive causality.
+
+**Assumptions:** The existing API can be called read-only and returns logs relevant to an authorized job/dependency scope. These are assumptions, not verified facts.
+
+**Open questions:** Define access and redaction policy, retrieval/depth/time limits, how dependencies are identified, audit retention, acceptable confidence/report schema, and escalation behavior when the evidence is inconclusiveΓÇöwhile preserving the explicit prohibition on paging and state changes.
+
+**Architecture review required before implementation.**
+

@@ -1,0 +1,64 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to validate (for example v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  # Same pinned tool and version validate.yml installs, so a release cannot publish content that
+  # the separate validation workflow would fail on.
+  MARKDOWNLINT_CLI_VERSION: 0.49.1
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tagged scope
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          fetch-depth: 0
+
+      - name: Install markdownlint-cli (pinned)
+        run: npm install --global "markdownlint-cli@${MARKDOWNLINT_CLI_VERSION}"
+
+      - name: Validate package
+        shell: pwsh
+        run: pwsh -File ./eng/Test-Skills.ps1
+
+      - name: Verify version and export parity
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          $version = & ./eng/Test-ReleaseTag.ps1 -Tag $env:RELEASE_TAG
+          "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          & ./eng/Get-ReleaseNotes.ps1 -Version $version |
+            Set-Content -LiteralPath "$env:RUNNER_TEMP/release-notes.md" -Encoding utf8
+          pwsh -File ./eng/Export-Package.ps1 -ExportPath "$env:RUNNER_TEMP/package-export"
+
+      - name: Create one archive per skill
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          for skill in agentic-architecture-router maf-architecture-mapping; do
+            tar -czf "$RUNNER_TEMP/release/${skill}-${RELEASE_VERSION}.tar.gz" \
+              -C "$RUNNER_TEMP/package-export/skills" "$skill"
+          done
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          body_path: ${{ runner.temp }}/release-notes.md
+          files: ${{ runner.temp }}/release/*.tar.gz

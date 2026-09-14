@@ -1,0 +1,43 @@
+Everything needed is in hand: the decision is supplied inline, and the construct map, runtime rules, assurance rules, and dated surface file are read. No further lookups are required, so here is the mapping.
+
+## Step 1: decision check
+
+The supplied decision is complete enough to map. It names a single agent at the adaptive tier, a read-only scope, an existing typed API owned by another team, and an explicit router finding that no MCP-specific property exists. I take those four facts as given and do not re-derive them.
+
+## Step 2: the callable API responsibility
+
+| Responsibility | Construct | Property that justifies it |
+| --- | --- | --- |
+| Fetch failed-job logs on demand, choosing what to query next from what was already found | A function tool over the existing typed API: a C# method wrapping the other team's API client, bound as a tool on the `AIAgent` from row 1 | The agent must decide from intermediate findings which logs to pull next, so API access is a call the agent makes mid-loop, not context injected before reasoning. The router recorded no MCP-specific property, so the existing API boundary is preserved and the owning team's contract stays the contract. |
+
+**Why not the neighbouring rows.**
+
+- **Not row 6, McpClient.** Another team owning the API does not earn an MCP boundary. FR-008 needs one of three recorded properties: runtime discovery because the contract changes independently, several agents or hosts sharing one protocol boundary, or MCP-only exposure. The router found none. Wrapping a typed API you can already call in MCP would trade compile-time typing for runtime discovery and add a protocol layer for no gain.
+- **Not row 3, a context provider.** Logs here are not a corpus retrieved up front and cited. Front-loading retrieval would remove the adaptive property that justified the agent in the first place.
+- **Not row 9, approval-required function.** The tool is read-only, so there is no consequential call to gate. If a remediation tool is added later, that tool goes to row 9 under a fresh routing decision. This one does not.
+- **Row 2, agent session, is conditional.** It applies only if an operator asks follow-up questions within one investigation. The decision does not say, so it is an open question below.
+- **Row 4 is not in the decision.** Do not add cross-session recall of prior findings unless the router routes it.
+
+## Step 3: runtime and control
+
+- **Hosting placement** is not part of the supplied decision. It is an operational choice under row 12, and the tool mapping is identical in-process or hosted.
+- **Ingress and protocol negotiation** matter only if hosted. No A2A is involved, so binding compatibility does not arise.
+- **Isolation and lifecycle** apply only if hosted. The investigation must finish within the hosting layer's idle and reclaim policy, because the agent does not control its own lifecycle.
+- **Estate control is the one open design point.** The tool needs an identity to call the other team's API. Recommendation: use the agent's own service identity with a read-only scope granted by the API owner. A propagated caller identifier is not a delegated-access grant. Only if the API authorizes per user does the delegated-access consent flow become required.
+- **Human authority.** None of the three layers applies to a read-only tool. State that explicitly in the design rather than leaving it implied.
+
+Step 4: assurance
+
+- **Observe.** Record every API tool call with its arguments, job identifier, time range, and result size, independent of the agent's own narrative.
+- **Evaluate.** The pass criterion is requirement-derived: did the run identify the failure cause for the job, not whether the summary read well.
+- **Verify behaviour.** Two checks. First, does the query sequence actually vary with findings across runs? A fixed sequence means the autonomy was unjustified and the responsibility should be re-routed down to bounded AI or plain code. Second, does the no-MCP finding still hold? Revisit FR-008 if a second agent or host needs the same tool, or if the API owner begins changing the contract independently, or exposes it only as MCP.
+- **Regress.** Contract changes from the owning team are the regression trigger. Re-run the behavioural checks on each API version change.
+
+Step 5 and 6: dated facts and open questions
+
+- `AIAgent`, created through the project-client adapter in the `Microsoft.Agents.AI` namespace, was read from Microsoft Learn on 2026-09-13. Re-verify before any code is written.
+- The surface file does not record the helper that binds a C# method as a function tool. It only records that MCP tools and approval-required functions derive from the `AIFunction` type. Confirm the current binding helper from live documentation. I do not assert it from memory.
+- The session type name and its creation method are sourced only to a maintainer note dated 2026-09-14, which is after today's date of 2026-09-13. That is a conflict in the reference file. Treat the session naming as unverified until read from a live page.
+- The .NET availability status is unverified. The C# quick start used a prerelease flag on the Foundry package as of 2026-09-13. Risk: the surface can change before this ships. Pinning strategy: pin the exact package version and SDK commit the design is validated against, so a later preview change shows up as a known diff rather than a silent behaviour change.
+
+The mapping lands on a function tool over the existing typed API, bound to a single adaptive agent, with the MCP row explicitly rejected on FR-008 grounds. The two items still needing a decision before implementation are the calling identity for the API and whether a multi-turn session is required.

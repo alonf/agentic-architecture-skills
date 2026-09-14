@@ -1,0 +1,63 @@
+ΓùÅ skill(maf-architecture-mapping)
+
+IΓÇÖm grounding the coverage strictly in the skillΓÇÖs construct map and evidence files, then IΓÇÖll separate demonstrated rows from named-but-undemonstrated material and avoid API or availability claims.
+
+ΓùÅ Read construct-map.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\construct-map.md
+  Γöö 67 lines read
+
+ΓùÅ Read assurance.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\assurance.md
+  Γöö 55 lines read
+
+ΓùÅ Read maf-surface.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\maf-surface.md
+  Γöö 116 lines read
+
+ΓùÅ Read runtime-and-control.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\runtime-and-control.md
+  Γöö 62 lines read
+
+## Mapping coverage
+
+**Scope:** Step 2 of the MAF mapping procedure, assuming the mechanism decision is already approved. The twelve rows describe the responsibilities the construct map covers; they do **not** mean every approved architecture must use all twelve.
+
+| # | Responsibility | MAF construct | Coverage status and evidence limit |
+|---:|---|---|---|
+| 1 | Runtime-directed investigation by one agent | `AIAgent` with a bound C# tool | **Demonstrated.** The material stages a single agent deciding what to check next. The adapterΓÇÖs exact API surface is dated separately and must be re-verified. |
+| 2 | Conversation state within one interaction | `AgentSession` | **Demonstrated.** The evidence supports turn continuity, not durable cross-session memory. |
+| 3 | External evidence retrieval and citation | `AIContextProvider` backed by a search source such as `TextSearchProvider` | **Demonstrated.** This covers retrieval/context injection, not memorized knowledge. |
+| 4 | Recall of the agentΓÇÖs own prior findings | Custom `AIContextProvider` | **Demonstrated.** Prior findings are hypotheses requiring re-verification; this is distinct from external-corpus retrieval. |
+| 5 | On-demand procedural knowledge | `AgentSkillsProvider` with `SKILL.md` | **Demonstrated.** The evidence is for progressive disclosure of declarative procedures, not direct execution of skill content as code. |
+| 6 | Independently owned tool surface with an approved MCP-specific rationale | `McpClient` against an MCP server | **Demonstrated.** Ownership alone is insufficient; without the separately approved MCP property, the mapping is a function tool over the existing typed API. |
+| 7 | Human answer required during an approved MCP call | MCP elicitation | **Demonstrated at the mechanism level.** The material supports pause/resume through the protocol boundary. The exact current elicitation API is intentionally unasserted. |
+| 8 | Fixed sequence with authorization at a graph step | Workflow graph with a human gate | **Demonstrated.** This is a workflow-stage boundary, not a general-purpose governance middleware layer. |
+| 9 | Human sign-off before one consequential tool call | `ApprovalRequiredAIFunction` | **Demonstrated.** This is per-call approval and must not be conflated with a workflow gate or delegated-access consent. |
+| 10 | Bounded consultation of a second agent | Agent-as-tool over its callable API; MCP only with a separately approved MCP rationale | **Demonstrated.** The staged pattern is bounded capability consultation, not peer delegation. |
+| 11 | Task delegation to a peer agent | Agent-card discovery and A2A task delegation | **Demonstrated.** The evidence covers delegation as a task/result boundary. Wire-binding compatibility between hosted peers remains unverified. |
+| 12 | Where the agent executes | Hosted runtime | **Demonstrated as a hosting construct.** Hosting is operational placement, not an autonomy decision; isolation, lifecycle, identity, ingress, and cost still require runtime-specific verification. |
+
+## Named but not demonstrated
+
+These are **not covered by a staged demonstration**, even though the source material names or compares them:
+
+- **Handoff:** slide-only/not implemented in the demonstration. It is a workflow orchestration mode, not evidence that the staged system uses handoff.
+- **Group chat:** slide-only/not implemented. Its current C# builder name remains unasserted and must not be inferred from another orchestration.
+- **Harness agent:** named on a slide, but not implemented or demonstrated.
+- **Governance middleware:** not demonstrated as middleware. The demonstrated authority mechanisms are the workflow gate, per-call approval, and delegated-access consent flow.
+- **Protocols as a standalone construct:** not a separate demonstrated runtime construct; protocol choices are treated as ingress, negotiation, and binding decisions.
+
+## Runtime/control coverage
+
+For any selected row, the mapping still needs the Step 3 decisions: in-process versus hosted placement, ingress contract, protocol/binding negotiation, isolation, lifecycle control, identity propagation, and the applicable human-authority layer. A propagated caller identifier is not evidence of permission to act as that caller; delegated access requires explicit consent.
+
+## Assurance and evidence limits
+
+The mapping does not prove that an implementation satisfies its requirement. Step 4 requires independent execution evidenceΓÇötool calls, arguments, intermediate results, approval requests and outcomesΓÇöfollowed by requirement-specific evaluation, verification that the original routing decision still holds, and regression after changes.
+
+No method signatures, namespaces, package versions, GA/preview claims, or current availability claims are established here. The surface notes contain dated facts that must be checked against current Microsoft Agent Framework documentation before implementation or a final platform design. No harness, middleware implementation, group-chat demonstration, or A2A wire compatibility should be inferred from this coverage.
+

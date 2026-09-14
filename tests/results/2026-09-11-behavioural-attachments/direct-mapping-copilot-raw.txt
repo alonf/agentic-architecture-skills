@@ -1,0 +1,200 @@
+=== R1 : Map this to Microsoft Agent Framework constructs in .NET. ===
+● skill(maf-architecture-mapping)
+
+● skill(agentic-architecture-router)
+
+## Step 1 — Mechanism decision required
+
+I can map an approved architecture decision to Microsoft Agent Framework constructs in .NET, but no requirement or mechanism decision was provided to map. I will not assume that the solution should use an agent, workflow, bounded AI capability, MCP, or multi-agent design.
+
+Provide the approved decision or the system requirement, including:
+
+- Responsibilities the system must perform
+- Where AI may make decisions, if anywhere
+- Required workflow, human-approval, authorization, and audit boundaries
+- External services, tools, or APIs involved
+- Hosting and protocol constraints
+
+Once supplied, I’ll map each responsibility to the appropriate MAF construct, resolve runtime/control placement, identify assurance checks, and flag any version or API facts that require live verification.
+
+**Architecture review required before implementation.**
+
+
+
+Changes    +0 -0
+AI Credits 0.43 (16s)
+Tokens     ↑ 55.3k (35.4k cached, 19.9k written) • ↓ 398 (182 reasoning)
+Resume     copilot --resume=740f6d5f-4b09-43c4-9b51-96c49fdc6280
+
+=== R2 : The architecture decision is: bounded AI capability for a fraud-scoring responsibility. Map this to Microsoft Agent Framework constructs in .NET and C#. Include construct ownership, runtime/control placement, assurance, and carry any dated facts via maf-surface only. ===
+● skill(maf-architecture-mapping)
+
+● Read construct-map.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\maf-architecture-mapping\references\cons
+  │ truct-map.md
+  └ 60 lines read
+
+● Read runtime-and-control.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\maf-architecture-mapping\references\runt
+  │ ime-and-control.md
+  └ 62 lines read
+
+● Read assurance.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\maf-architecture-mapping\references\assu
+  │ rance.md
+  └ 55 lines read
+
+● Read maf-surface.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\maf-architecture-mapping\references\maf-
+  │ surface.md
+  └ 71 lines read
+
+## Mapping: Bounded AI capability — fraud-scoring responsibility
+
+**Step 1 — Decision (given):** Already routed as *bounded AI*, not an agent. Per `construct-map.md`'s "when the decision was not an agent" section, this is intentional: no autonomous run-time decisioning about what to check next, no multi-turn tool loop.
+
+**Step 2 — Construct ownership**
+| Responsibility | Construct | Why |
+|---|---|---|
+| Fraud scoring (fixed input → fixed structured output) | A **direct, structured-output model call** — the current chat-client-shaped surface (see `maf-surface.md`) | Bounded AI = fixed-shape call; none of the 12 agent-loop rows apply |
+| Not used | `AIAgent`, `AgentThread`/session wrapper, `AIContextProvider`, `AgentSkillsProvider`, `McpClient`, workflow graph, `ApprovalRequiredAIFunction` | These exist only once the mechanism needs run-time decisioning, multi-turn state, retrieval, tool discovery, or a step sequence — none of which this responsibility has been routed to need |
+
+If a later spike shows the score sometimes needs to pull more evidence before answering or vary what it checks next, that's a **new routing decision** (potential drift to row 1, `AIAgent`), not a reinterpretation of this mapping — flag it, don't silently upgrade the construct.
+
+**Step 3 — Runtime/control placement**
+1. **Hosting placement:** A bounded call has no agent-loop state to isolate; it can run in-process with the caller (e.g., embedded in the scoring service) rather than requiring a separately hosted agent runtime. Only promote to a hosted runtime if operational reasons (scaling, shared model access, isolation from caller) justify it independently — that's row 12's operational decision, not a mechanism decision.
+2. **Ingress contract:** N/A for in-process; if hosted, the call rides the hosting layer's own request/response ingress, not A2A/MCP protocols (those are agent-boundary concerns).
+3. **Protocol negotiation:** N/A — no multi-agent boundary exists here.
+4. **Isolation:** If hosted, isolation is per-session/per-call per the sandboxed model noted in `maf-surface.md` — re-verify against live docs, don't assume replica-pool scaling.
+5. **Runtime control (lifecycle):** A single stateless call has no session lifecycle to manage; if wrapped in a hosted runtime anyway, the hosting layer — not the call — owns start/idle/reclaim.
+6. **Estate control (identity):** Whatever identity reaches the fraud-scoring call is an identifier only, per the verified finding in `maf-surface.md` — it does not itself authorize acting on the caller's behalf against downstream systems (e.g., blocking an account); that needs an explicit consent step if such action is later added.
+7. **Human authority layer:** None of the three authority mechanisms is needed for the scoring call itself. If a *downstream action* (block transaction, freeze account) is triggered off the score, that action needs its own explicit authority binding — most likely `ApprovalRequiredAIFunction` (per-call sign-off) if it's a single consequential action, not a workflow gate, unless scoring sits inside a larger fixed multi-step process.
+
+**Step 4 — Assurance**
+- **Observe:** Capture the call's actual input, output score/label, and model/version used — independently of any downstream narration. A bounded call still needs this evidence trail; "the score was X" isn't self-verifying.
+- **Evaluate:** Check against fraud-scoring's specific pass criteria (e.g., score calibration, false-positive/negative behavior on known cases) — not generic "looked reasonable."
+- **Verify behaviour:** Confirm the responsibility still behaves as a fixed-shape call in practice — watch for drift where the scoring logic starts needing to decide what additional evidence to check (that would mean the bounded-AI routing has silently failed and needs re-routing to an agent, row 1).
+- **Regress:** Re-run the same evaluation set after any model/prompt/version change so a later change doesn't silently alter established scoring behavior.
+
+**Step 5 — Dated facts carried (from `maf-surface.md`, verify before use)**
+- Bounded-AI call surface: `Microsoft.Extensions.AI`'s `IChatClient` abstraction (structured/typed output) is the direct-call shape — *not* an `AIAgent`, *not* an `AgentThread`. **Unconfirmed**: current recommended-surface status and GA/preview state — verify against live Microsoft.Extensions.AI docs before citing a namespace/package version.
+- If any hosted-runtime option is considered for operational reasons: isolation-per-session and identity-as-identifier-only findings are dated 2026-09-04/05 against one spike deployment — re-verify, not a standing SLA.
+- No preview-status component is asserted here; if the eventual `IChatClient` implementation chosen is preview, state that risk and a pinning strategy explicitly in the design doc, per `maf-surface.md`.
+
+**Step 6 — Open questions**
+- Exact current class/namespace for the structured-output call surface is unconfirmed — flagged, not asserted.
+- Whether any downstream action off the score requires per-call approval (`ApprovalRequiredAIFunction`) depends on what the scoring result triggers — not decided here; needs its own routing pass if such an action exists.
+
+
+
+Changes    +0 -0
+AI Credits 8.71 (34s)
+Tokens     ↑ 92.5k (56.5k cached, 36.0k written) • ↓ 2.3k (57 reasoning)
+Resume     copilot --resume=a7215979-26b7-4ab1-85f8-6aa8d99d2ee9
+
+=== R3 : The approved architecture decision is: single agent for a diagnostic responsibility where intermediate findings determine what to inspect next. Map this to Microsoft Agent Framework constructs in .NET and C#. Name the construct, runtime/control placement, assurance, and any dated facts only via maf-surface.md. ===
+● skill(maf-architecture-mapping)
+
+● Read construct-map.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\maf-architecture-mapping\references\cons
+  │ truct-map.md
+  └ 60 lines read
+
+● Read maf-surface.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\maf-architecture-mapping\references\maf-
+  │ surface.md
+  └ 71 lines read
+
+● Read assurance.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\maf-architecture-mapping\references\assu
+  │ rance.md
+  └ 55 lines read
+
+● Read runtime-and-control.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\maf-architecture-mapping\references\runt
+  │ ime-and-control.md
+  └ 62 lines read
+
+## Mapping: single agent, diagnostic responsibility, intermediate findings determine next inspection step
+
+**Step 1 — Decision (given):** Already routed as a single agent — this is row 1's exact trigger: the mechanism must decide, from its own intermediate findings, what to examine next. A bounded/fixed-shape AI call was insufficient because the next inspection step is not fixed in advance.
+
+**Step 2 — Construct**
+| Responsibility | Construct | Justification |
+|---|---|---|
+| Decide-what-to-check-next diagnostic loop | `AIAgent` (e.g. bound to a C# method as tool) | Axis-1 tier-3: the mechanism itself must branch on its own findings — the bounded-AI challenge already failed here. |
+| Continuity of findings within one diagnostic run | `AgentThread` *(unsure — some material calls this `AgentSession`; verify current SDK naming before citing)* | Turn-to-turn continuity within the interaction only — must not be conflated with cross-session recall. |
+| If diagnosis needs prior-run recall | Custom `AIContextProvider` recalling prior outcomes | Only add this if the responsibility spans sessions; treat recalled findings as a hypothesis to re-verify, not fact. |
+| If inspection tools belong to another team/service | `McpClient` discovery against an MCP server | Only if a real ownership boundary exists — not asserted by the prompt alone. |
+
+**Step 3 — Runtime/control placement**
+- *Hosting placement*: choose in-process vs. hosted runtime based on whether an isolation boundary between agent and caller is needed — this decision is independent of the agent construct itself.
+- *Ingress contract*: if hosted, the agent's request/response contract is the primary ingress.
+- *Isolation*: if hosted, expect per-session isolation, not a shared replica pool (see maf-surface.md caveat below).
+- *Runtime control (lifecycle)*: the hosting layer, not the agent, owns session start/idle/reclaim — do not assume the diagnostic session persists past the hosting layer's policy.
+- *Estate control*: if the diagnostic tool calls act against a downstream system as the calling user, that needs an explicit delegated-access consent step, not an assumed identity header.
+- *Human authority*: none of the three authority layers (workflow gate, per-call approval, delegated-access consent) is triggered by this responsibility alone — add one only if a specific inspection step becomes consequential enough to require sign-off.
+
+**Step 4 — Assurance**
+- **Observe**: capture the sequence of inspection calls, arguments, and intermediate findings independently of the agent's own narration — this is the evidence "verify" and "evaluate" depend on.
+- **Evaluate**: check against the diagnostic requirement's specific pass criteria (e.g., correct root cause identified), not "looked reasonable."
+- **Verify behaviour**: confirm the agent actually varies its next inspection step run-to-run — if it never does, this has more autonomy than justified and should be re-routed down to bounded AI.
+- **Regress**: re-run the check after future changes; a stale prior pass is not evidence current behavior still holds.
+
+**Step 5 — Dated facts (only in maf-surface.md, re-verify before use)**
+- Hosted-agent isolation is per-session sandbox, not replica-count scaling, as verified 2026-09-04/05 — re-confirm against current docs.
+- Identity propagation reaches the agent as an identifier only; acting *as* the caller needs an explicit consent step (verified 2026-09-05).
+- No preview-status component is asserted here; if the eventual implementation depends on one, state its risk and pin an exact version before shipping.
+
+**Step 6 — Open/unconfirmed**
+- Exact current name of the session/thread wrapper (`AgentThread` vs. `AgentSession`) is unconfirmed — verify against live SDK docs before writing code.
+- Whether MCP tooling is needed at all depends on an ownership-boundary fact not given in this prompt — do not assume it.
+
+
+
+Changes    +0 -0
+AI Credits 5.49 (27s)
+Tokens     ↑ 92.6k (74.6k cached, 17.9k written) • ↓ 1.9k (94 reasoning)
+Resume     copilot --resume=8b9962ab-280c-4756-9ea8-2c7545fe69ca
+
+=== R4 : Approved decision: a specific consequential tool call needs human sign-off before it runs. Which MAF construct owns this responsibility in Agent Framework? Include runtime/control placement, assurance, and carry any dated facts via maf-surface.md. ===
+● skill(maf-architecture-mapping)
+
+I’m mapping the approved human-sign-off responsibility through the skill’s construct, runtime/control, assurance, and dated-fact surfaces.
+
+● Read maf-surface.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\maf-architecture-mapping\references\maf-
+  │ surface.md
+  └ 71 lines read
+
+● Read assurance.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\maf-architecture-mapping\references\assu
+  │ rance.md
+  └ 55 lines read
+
+● Read construct-map.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\maf-architecture-mapping\references\cons
+  │ truct-map.md
+  └ 60 lines read
+
+● Read runtime-and-control.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\maf-architecture-mapping\references\runt
+  │ ime-and-control.md
+  └ 62 lines read
+
+**Step 2 — Construct mapping:** The responsibility maps to **`ApprovalRequiredAIFunction`**. It owns **per-tool-call authorization**: the function invocation is suspended until a human approves or rejects it. This is distinct from a workflow human gate, which authorizes a graph transition or stage rather than one consequential call.
+
+**Step 3 — Runtime and control:** Place the approval boundary at the tool/function layer, regardless of whether the agent runs in-process or in a hosted runtime. The agent may decide to request the function, but it must not be able to bypass the approval wrapper. The human-authority layer is **per-call approval**, not delegated-access consent; if the tool must act as the caller against a downstream system, that is a separate consent requirement.
+
+**Step 4 — Assurance:** Independently record the proposed tool, arguments, requesting identity, approval decision, approver, and execution result. Evaluate that rejected or absent approvals never execute the call; verify that the implementation has not drifted into a broader stage-level gate or an unprotected alternate tool path; regress these properties whenever the tool contract, routing, identity handling, or approval UI changes.
+
+**Steps 5–6 — Surface and uncertainty:** No package version, method signature, namespace, or GA/preview claim is asserted here. Dated platform facts remain in `references/maf-surface.md`; its existing entries are dated **2026-09-04/05** and must be re-verified against live Microsoft Agent Framework documentation before implementation. The current approval construct name should likewise be confirmed against live MAF documentation before code is generated.
+
+
+
+Changes    +0 -0
+AI Credits 0.53 (20s)
+Tokens     ↑ 58.3k (35.4k cached, 22.9k written) • ↓ 980 (409 reasoning)
+Resume     copilot --resume=f39241e3-6a85-410e-bf5b-2dead03e273b
+
+

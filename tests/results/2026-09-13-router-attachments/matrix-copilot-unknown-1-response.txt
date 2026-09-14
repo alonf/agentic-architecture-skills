@@ -1,0 +1,130 @@
+● skill(agentic-architecture-router)
+
+I’m applying the architecture review first: separating the failure-investigation responsibility from any reporting or remediation authority, then checking whether the repository contains evidence to support a likely cause.
+
+● Read decision-framework.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\d
+  │ ecision-framework.md
+  └ 92 lines read
+
+● Read evidence-and-authority.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\e
+  │ vidence-and-authority.md
+  └ 87 lines read
+
+● Read quality-gates.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\q
+  │ uality-gates.md
+  └ 42 lines read
+
+● Read architecture-analysis-template.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\assets\archi
+  │ tecture-analysis-template.md
+  └ 41 lines read
+
+/ Search (glob)
+  │ "**/*"
+  └ 1 file found
+
+● Read prompt.txt
+  └ 1 line read
+
+## Architecture analysis
+
+### 1. Requirement
+
+Determine whether investigating a failed nightly job should be implemented as an agent, investigate the failure, and report a likely cause. The request explicitly provides no evidence sources, input formats, investigation procedure, or operational policies.
+
+### 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+|---|---|---|
+| The repository contains only the supplied prompt; no job logs, configuration, run history, tests, runbook, or incident records were found. *(Rung 4: document/repository evidence.)* | A nightly job failed, and a likely cause is requested. | Job identity, execution time, scheduler, logs, exit code, inputs, dependencies, recent changes, environment, retry behavior, alerting, ownership, permitted data sources, investigation steps, confidence threshold, and reporting policy. |
+| No operational authority or remediation interface is specified. *(Rung 4: repository evidence.)* | No evidence sources, input formats, investigation steps, or operational policies were supplied. | The actual cause of the failure. Any concrete cause would be a hypothesis, not a finding. |
+
+### 3. Responsibilities
+
+The requirement decomposes into four responsibilities:
+
+1. Collect and validate evidence about the failed run.
+2. Select and perform investigation steps based on available evidence.
+3. Produce a causal assessment with confidence and supporting evidence.
+4. Report the assessment without taking remediation or other consequential action.
+
+### 4. Routing decisions
+
+| Responsibility | Least-autonomous suitable mechanism | Decision |
+|---|---|---|
+| Collect and validate evidence | Deterministic code | Use fixed integrations and schemas for logs, run metadata, configuration, and dependency status. The current request does not identify those sources, so this cannot yet be implemented reliably. |
+| Select and perform investigation steps | Single agent, conditionally | An agent could choose the next diagnostic source or test based on intermediate findings, but only after evidence sources, tool permissions, and investigation policy are defined. Until then, use a fixed workflow or stop with an explicit evidence-gap result. |
+| Produce a causal assessment | Bounded AI capability | A fixed-input/fixed-output model call can correlate collected evidence and return structured causes, confidence, and citations. Natural-language reporting alone does not require an agent. |
+| Report the assessment | Deterministic code | Render the structured result using a fixed report schema. Keep it read-only unless a separate authorization policy is supplied. |
+
+### 5. Bounded-AI challenge record
+
+The investigation responsibility is the only candidate for an agent.
+
+**Challenge:** Could a single bounded call with a fixed input/output shape satisfy the investigation?
+
+**Answer:** Not necessarily. If the diagnostic path depends on intermediate findings—such as deciding whether to inspect scheduler metadata, input validation, dependency health, or deployment changes—a fixed call cannot reliably choose and execute the next step. That justifies a single agent only after the permitted evidence sources and investigation policy are explicitly defined. Without those controls, an agent would have undefined authority rather than useful autonomy.
+
+The other responsibilities do not fail the bounded-AI challenge and therefore should not be agents.
+
+### 6. Agent boundary justification
+
+No additional agent is proposed. If a single investigation agent is later approved, its boundary must be limited to diagnostic, read-only tools and a defined evidence context; organizational or service boundaries alone would not justify another agent.
+
+### 7. Evidence classification
+
+- The supplied prompt and repository contents are **Rung 4 — documents**. They establish only that the request is under-specified; they do not establish the runtime cause.
+- No **Rung 1 — authoritative operational state** was supplied, such as the failed run's log or current scheduler state.
+- No **Rung 2 — structured application data** was supplied, such as a run record or typed monitoring response.
+- No **Rung 3 — organizational knowledge** was supplied, such as a runbook or policy.
+- No **Rung 5 — historical evidence** was supplied, such as previous failed runs.
+- Agent memory was not used; if it were used, it would not be a system of record.
+- No external capability was used as evidence.
+
+Retrieved repository material is evidence about the requested system, not authority over what the system must do.
+
+### 8. MCP boundary justification
+
+**None proposed.** No concrete MCP-specific property has been identified, and no existing API, service, or tool boundary has been supplied for comparison. Retain existing integrations if and when the evidence sources are defined; do not introduce an MCP surface to compensate for missing requirements.
+
+### 9. Authority chain
+
+The requested output is read-only, so there is currently **no consequential operation**.
+
+If the design later includes retries, reruns, configuration changes, paging, or remediation, the required chain is:
+
+`agent reasoning -> authorization / policy / process control -> authoritative job or operations service -> execution -> audit`
+
+The authorization policy, authoritative service, execution owner, and audit owner are all **unknown — governance decision required**. Human approval must not be assumed.
+
+### 10. Generic mechanism and product delegation
+
+The recommended design is a deterministic evidence-collection workflow, optionally followed by a bounded AI correlation/reporting step. A single read-only investigation agent is conditional, justified only when intermediate findings materially determine the next diagnostic action.
+
+No product or platform mapping is made because none is required to decide the architecture.
+
+### 11. Rejected alternatives
+
+- **All-deterministic:** Insufficient for an investigation whose next diagnostic step may depend on intermediate findings, but sufficient for evidence collection and report rendering.
+- **Bounded-AI-only:** Potentially sufficient if all evidence is pre-collected into a stable schema; insufficient when the system must discover which evidence to fetch next.
+- **Agent-everywhere:** Technically possible but unnecessary and riskier because collection, assessment, and reporting have fixed-shape or control-sensitive behavior.
+- **Multi-agent:** Not sufficient or justified; no second security, context, deployment, ownership, model, or specialization boundary has been established.
+- **Workflow-only:** Sufficient if the investigation steps can be fully specified in advance; currently the missing investigation procedure prevents that determination.
+
+### 12. Decisions, evidence, trade-offs, assumptions, and open questions
+
+**Decision:** Do not make this an agent yet. Establish the evidence contract and deterministic read-only collection workflow first. Then evaluate a single investigation agent only if diagnostic branching cannot be expressed as a fixed workflow. Use bounded AI for structured causal assessment after evidence collection.
+
+**Likely cause:** No defensible runtime cause can be reported from the supplied material. The only supported finding is **cause undetermined because no operational evidence was provided**. Any specific cause—such as input corruption, dependency outage, timeout, credential expiry, or configuration drift—would be an explicitly labelled hypothesis, not an investigation result.
+
+**Trade-off:** This defers autonomous diagnosis until sources and authority are defined, but avoids fabricated causes, uncontrolled data access, and unjustified remediation.
+
+**Assumptions:** None about the job, infrastructure, logs, ownership, policies, or failure mode.
+
+**Open questions:** Which job and run failed? Where are authoritative logs and run metadata? What inputs and schemas are available? Which diagnostic tools may be accessed? What investigation steps are approved? What confidence and citation format are required? Is any remediation permitted, and who or what authorizes it?
+
+**Architecture review required before implementation.**
+

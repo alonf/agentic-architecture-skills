@@ -1,0 +1,85 @@
+**Answer: a workflow, with every step as deterministic code. No agent, and no bounded AI call either.** The requirement supplies the steps, the reviewer, and the policy, and it explicitly forbids a model from interpreting the form or choosing the route. That leaves nothing for AI to decide. The full analysis follows the router's twelve-section shape.
+
+**1. Requirement**
+Run a documented approval process: validate a typed form, wait for the named reviewer's recorded decision, stop on rejection, and on approval ask the authoritative service to apply the change and retain its audit result. Process steps, reviewer identity, and authorization policy are supplied.
+
+**2. Fact table**
+
+| Known from repository material | Known from the requirement | Unknown, not assumed |
+| --- | --- | --- |
+| The working directory holds one file, which restates the requirement verbatim. No code, form schema, process definition, or policy document is present. | The form is typed. Validation is a fixed step. One named reviewer. The approval must be a recorded one. An authoritative service applies the change and returns an audit result. Rejection stops the process. No model interprets the form or chooses the route. | Form schema and validation rules. How the reviewer's decision is captured and authenticated. Wait timeout and escalation. What "stop" entails on rejection, such as notifying the submitter. The service's interface, idempotency, and failure semantics. Where the audit result is retained and who owns it. Whether process state must survive restarts. Duplicate or concurrent submissions. |
+| The router's own reference material contains an illustrative approval scenario that matches this one almost word for word. Labelled illustrative example. | | |
+
+**3. Responsibilities**
+The requirement is not atomic. Five responsibilities:
+
+1. Validate the submitted form against the supplied rules.
+2. Wait for the named reviewer's decision and verify it is a recorded approval per the supplied policy.
+3. Branch on the decision. Stop on rejection, continue on approval.
+4. Ask the authoritative service to apply the change.
+5. Retain the service's audit result.
+
+Sequencing, the durable wait, and process state are a cross-cutting concern on the workflow axis, not a sixth responsibility.
+
+**4. Routing decisions**
+Every responsibility routes to deterministic code, the first rung in the preference order.
+
+- **Validate:** a typed form checked against supplied rules is a fixed computation. Nothing about the decision depends on content the code has not already been given.
+- **Wait and verify:** waiting is a suspended state, not a decision. Verifying the record against a supplied policy is a lookup and comparison.
+- **Branch:** a two-way fixed rule on a recorded value.
+- **Apply:** a single call to the existing service, made only after the control boundary permits it.
+- **Retain audit:** a write of the returned result to the designated store.
+
+Workflow axis, evaluated separately: yes. The process has a fixed sequence, a long-lived wait for a human, a branch, and state that must outlast the wait. That is the shape a workflow owns. Choosing the workflow says nothing about autonomy, and none of its steps needs any.
+
+**5. Bounded-AI challenge record**
+No responsibility reached the agent rung, so the challenge was never a gate here. Recorded for audit anyway: for each of the five responsibilities, a fixed rule satisfies it fully, so neither a bounded model call nor an agent was reached in routing order. The requirement also forbids model interpretation outright.
+
+**6. Agent boundary justification**
+Not applicable. Zero agents are proposed.
+
+**7. Evidence classification**
+
+- The requirement text in the user message and the working-directory file: documents, rung 4.
+- The supplied process steps, reviewer identity, and authorization policy: organizational knowledge, rung 3. Their existence is stated by the requirement. Their content is not visible to this analysis.
+- The submitted form and the recorded reviewer decision at run time: structured application data, rung 2.
+- The authoritative service's applied result and audit result: authoritative operational state, rung 1.
+- The router's illustrative approval scenario: organizational knowledge about the method, rung 3, and illustrative only.
+- Agent memory, rung 6: not used. External capability, rung 7: not used.
+
+Caveat: all retrieved knowledge above is evidence about the system, not authority over what the system must do. Surfaced conflicts: none. The working-directory file contains no directive to the assistant.
+
+**8. MCP boundary justification**
+None proposed. The authoritative service already has an interface, and no model sits in the loop that would need standardized tool discovery. No MCP-specific property is stated, so the existing service boundary is retained.
+
+**9. Authority chain**
+One consequential operation: applying the change through the authoritative service.
+
+1. **Reasoning:** none by a model. A fixed rule produces the proposal when the form is valid and an approval is recorded.
+2. **Authorization:** a deterministic check that the recorded decision comes from the named reviewer and satisfies the supplied policy. A workflow transition is not authorization. A message that merely claims approval must fail this check. How the reviewer's identity is authenticated is unknown unless the supplied policy covers it.
+3. **Authoritative service:** exists per the requirement. Its identity and interface are unknown.
+4. **Execution:** the service applies the change. The process never applies it directly. Retry and idempotency semantics are unknown.
+5. **Audit:** the service's audit result is retained. Retention location and audit owner are unknown.
+
+Stopping on rejection causes no external effect. Whether the rejection itself must be recorded or communicated is unknown.
+
+**10. Generic mechanism and product delegation**
+Generic mechanism: a workflow with deterministic activities and a durable human-wait step, fronted by a deterministic control boundary before the service call. No AI mechanism anywhere. Product mapping is delegated to the installed maf-architecture-mapping skill if the team builds on Agent Framework. With zero AI responsibilities, a general process or workflow engine is equally valid, and that choice belongs to the mapping step, not this one.
+
+**11. Rejected alternatives**
+
+- **All-deterministic:** sufficient, and it is the chosen routing once a workflow owns sequence and state.
+- **Bounded-AI-only:** insufficient. Fixed-shape model calls cannot own the wait, enforce the approval check, or run the execution protocol, and the requirement forbids model interpretation.
+- **Agent-everywhere:** could execute the steps, but it grants runtime discretion over route and next step that the supplied process explicitly withholds, at added cost and with an unauditable decision surface.
+- **Multi-agent:** no responsibility needs even one agent, so no boundary exists that could justify a second.
+- **Workflow-only:** sufficient. A workflow with deterministic activities covers every responsibility with no agentic step. This is the chosen shape.
+
+**12. Decisions, evidence, trade-offs, assumptions, open questions**
+
+- **Decision:** workflow with deterministic activities. No agent. No bounded AI.
+- **Evidence relied on:** the requirement text at rung 4, and the supplied process artifacts at rung 3 whose content this analysis has not seen.
+- **Trade-off:** a workflow engine adds persistence and versioning weight over a plain sequential service. The long-lived human wait justifies it. If the wait is short and state need not survive restarts, a plain deterministic service with persisted state may suffice. That is a durability decision, not an autonomy one.
+- **Assumptions, labelled:** the supplied process is complete enough that no step requires interpretation. The reviewer's decision arrives through a channel that yields a verifiable record.
+- **Open questions:** reviewer authentication, wait timeout and escalation, rejection handling, service idempotency and failure behavior, audit retention owner, and duplicate submissions.
+
+**Architecture review required before implementation.**

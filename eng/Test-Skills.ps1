@@ -43,6 +43,17 @@ $script:MaxDescriptionChars = 1024
 $script:MaxNameChars = 64
 $script:NamePattern = '^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$'
 $script:TerminalLine = '**Architecture review required before implementation.**'
+# Decision Card fixtures are marked with this literal comment so the card-shape check knows which
+# golden fixtures to hold to FR-015's 12-15-line, nine-field contract; a full-analysis fixture has no
+# such line count and would be a false failure under the same check.
+$script:CardModeMarker = '<!-- mode: decision-card -->'
+$script:RequiredCardFieldCount = 9
+$script:MinCardSourceLines = 12
+$script:MaxCardSourceLines = 15
+$script:RequiredCardFields = @('Requirement', 'Known facts', 'Unknown / assumptions', 'Routed mechanism',
+    'Agent boundary', 'Evidence classification', 'Authority chain', 'Rejected alternatives', 'Decision and trade-off')
+$script:RequiredCardAlternatives = @('all-deterministic', 'bounded-AI-only', 'agent-everywhere', 'multi-agent', 'workflow-only')
+$script:RequiredAuthorityStages = @('reasoning', 'authorization', 'authoritative service', 'execution', 'audit')
 $script:RequiredPhrases = @(
     'should this be an agent'
     'deterministic vs agentic'
@@ -350,7 +361,7 @@ function Test-SecretsDenylist {
         Add-CheckResult -Check 'secrets-denylist' -Status 'fail' -Detail 'skills/ not found.'
         return
     }
-    $allowedHosts = @('github.com', 'learn.microsoft.com', 'docs.microsoft.com')
+    $allowedHosts = @('github.com', 'learn.microsoft.com', 'docs.microsoft.com', 'vslive.com')
     $problems = [System.Collections.Generic.List[string]]::new()
 
     foreach ($file in Get-ChildItem -LiteralPath $skillsDir -Recurse -File) {
@@ -437,6 +448,102 @@ function Test-GoldenFixtureTerminalLine {
     }
 }
 
+function Test-GoldenFixtureCardShape {
+    <#
+      FR-015 / SC-005: Decision Card mode MUST produce 12-15 source lines carrying nine specified
+      fields and the mandated terminal line. T303 also checks each alternative's nonempty verdict
+      and each ordered authority stage within its own field. This is a fixture contract, not proof
+      of semantic correctness or host behavior; those still need the recorded behavioral run.
+    #>
+    param([Parameter(Mandatory)][string] $Root)
+
+    $goldenDir = Join-Path $Root 'tests/golden'
+    $cardFixtures = @()
+    if (Test-Path -LiteralPath $goldenDir -PathType Container) {
+        $cardFixtures = @(Get-ChildItem -LiteralPath $goldenDir -Filter '*.md' -File | Where-Object {
+            (Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8) -like "*$script:CardModeMarker*"
+        })
+    }
+    if ($cardFixtures.Count -eq 0) {
+        Add-CheckResult -Check 'fixture-card-shape' -Status 'fail' -Detail 'required Decision Card fixture or its mode marker is missing'
+        return
+    }
+
+    $problems = [System.Collections.Generic.List[string]]::new()
+    foreach ($fixture in $cardFixtures) {
+        $raw = Get-Content -LiteralPath $fixture.FullName -Raw -Encoding UTF8
+        # Strip HTML comment blocks first: they carry authoring rationale, not card content, and would
+        # otherwise inflate the source-line count the check is supposed to hold to 12-15.
+        $stripped = $raw -replace '(?s)<!--.*?-->', ''
+        # Outer padding is not card content; interior blank lines are physical source lines.
+        $sourceLines = @($stripped.Trim() -split "`r?`n")
+        $lineCount = $sourceLines.Count
+        # A field line is "Label: value"; the mode-indicator line and the title line are excluded by
+        # name/pattern so they cannot be miscounted as one of the nine specified fields.
+        $fieldLines = @($sourceLines | Where-Object {
+            $_ -match '^[A-Za-z][A-Za-z /\-]*:\s' -and $_ -notmatch '^Mode:\s'
+        })
+        $fieldCount = $fieldLines.Count
+        $lastLine = $sourceLines | Select-Object -Last 1
+        $endsCorrectly = $lastLine -and $lastLine.TrimEnd().Equals($script:TerminalLine, [System.StringComparison]::Ordinal)
+
+        if ($lineCount -lt $script:MinCardSourceLines -or $lineCount -gt $script:MaxCardSourceLines) {
+            $problems.Add("$($fixture.Name): $lineCount source lines, need $script:MinCardSourceLines-$script:MaxCardSourceLines")
+        }
+        if ($fieldCount -ne $script:RequiredCardFieldCount) {
+            $problems.Add("$($fixture.Name): $fieldCount field line(s), need exactly $script:RequiredCardFieldCount")
+        }
+        $fields = @{}
+        foreach ($fieldLine in $fieldLines) {
+            $label, $value = $fieldLine -split ':\s*', 2
+            if ($fields.ContainsKey($label)) { $problems.Add("$($fixture.Name): duplicate field '$label'") }
+            $fields[$label] = $value
+        }
+        foreach ($label in $script:RequiredCardFields) {
+            if (-not $fields.ContainsKey($label) -or [string]::IsNullOrWhiteSpace($fields[$label])) {
+                $problems.Add("$($fixture.Name): missing or empty field '$label'")
+            }
+        }
+        $alternatives = [string]$fields['Rejected alternatives']
+        foreach ($alternative in $script:RequiredCardAlternatives) {
+            $pattern = '(?i)(?:^|;\s*)' + [regex]::Escape($alternative) + ':\s*[^;\s][^;]*'
+            if ($alternatives -notmatch $pattern) {
+                $problems.Add("$($fixture.Name): missing verdict for '$alternative'")
+            }
+        }
+        $authority = [string]$fields['Authority chain']
+        if ($authority -match '(?i)authorization:\s*(?:policy verdict|<the stated policy[^>]*>)\s*(?:→|->|$)') {
+            $problems.Add("$($fixture.Name): authorization contains literal placeholder text; state the permitting policy or unknown - governance decision required")
+        }
+        # A read-only card can justify non-applicability; consequential fixtures must carry the
+        # full chain as labelled stages, so a stage name elsewhere cannot disguise an omission.
+        if ($authority -notmatch '(?i)^no consequential action:\s*\S.+') {
+            $stages = @($authority -split '\s*(?:→|->)\s*')
+            if ($stages.Count -ne $script:RequiredAuthorityStages.Count) {
+                $problems.Add("$($fixture.Name): authority chain needs five ordered stages")
+            }
+            for ($index = 0; $index -lt $script:RequiredAuthorityStages.Count; $index++) {
+                $stage = $script:RequiredAuthorityStages[$index]
+                $prefix = if ($index -eq 0) { '(?:deterministic control boundary:\s*)?' } else { '' }
+                $pattern = '(?i)^' + $prefix + [regex]::Escape($stage) + ':\s*\S.+'
+                if ($index -ge $stages.Count -or $stages[$index] -notmatch $pattern) {
+                    $problems.Add("$($fixture.Name): missing or misplaced authority stage '$stage'")
+                }
+            }
+        }
+        if (-not $endsCorrectly) {
+            $problems.Add("$($fixture.Name): does not end with the mandated terminal line")
+        }
+    }
+
+    if ($problems.Count -eq 0) {
+        Add-CheckResult -Check 'fixture-card-shape' -Status 'pass' -Detail "$($cardFixtures.Count) Decision Card fixture(s) satisfy line/field counts, five verdicts, authority chain, and terminal line"
+    }
+    else {
+        Add-CheckResult -Check 'fixture-card-shape' -Status 'fail' -Detail ($problems -join '; ')
+    }
+}
+
 function Test-MarkdownLint {
     param([Parameter(Mandatory)][string] $Root)
 
@@ -497,6 +604,7 @@ Test-NoRepoLocalSkillsDir -Root $PackageRoot
 Test-SecretsDenylist -Root $PackageRoot
 Test-NoHostSpecificText -Root $PackageRoot
 Test-GoldenFixtureTerminalLine -Root $PackageRoot
+Test-GoldenFixtureCardShape -Root $PackageRoot
 Test-MarkdownLint -Root $PackageRoot
 Test-ExternalLinks -Root $PackageRoot
 

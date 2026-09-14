@@ -1,0 +1,1 @@
+Should this be an agent? We want a component that classifies free-text support requests into supplied categories, or returns unknown. The component returns a label only and never assigns or contacts anyone. There is no complete rule table; the full request text and category definitions will be supplied together to the component. Please assess that architecture requirement.

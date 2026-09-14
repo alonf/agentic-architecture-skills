@@ -1,0 +1,63 @@
+ΓùÅ skill(maf-architecture-mapping)
+
+IΓÇÖm applying the mapping procedure to the approved responsibilities, using the construct, runtime/control, assurance, and dated surface references without asserting unresolved API names.
+
+ΓùÅ Read construct-map.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\construct-map.md
+  Γöö 67 lines read
+
+ΓùÅ Read assurance.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\assurance.md
+  Γöö 55 lines read
+
+ΓùÅ Read maf-surface.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\maf-surface.md
+  Γöö 116 lines read
+
+ΓùÅ Read runtime-and-control.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\runtime-and-control.md
+  Γöö 62 lines read
+
+## Step 2 ΓÇö Responsibility-to-construct mapping
+
+| Responsibility | MAF construct | Architectural reason |
+|---|---|---|
+| Conversational state across turns within one interaction | **`AgentSession`** | Provides interaction-scoped continuity. It is not durable cross-session memory and should not be treated as a corpus-retrieval mechanism. |
+| Retrieval from an external corpus | **`AIContextProvider`**, backed by a search source such as **`TextSearchProvider`** | Keeps retrieved evidence separate from the agentΓÇÖs reasoning and makes corpus-derived context attributable and citable. |
+| Optional handoff workflow orchestration | **Workflow graph with a human gate**, using the handoff workflow constructs | Handoff is workflow orchestration: sequencing and transition control remain explicit even though individual agents may be autonomous. The surface reference records **`AgentWorkflowBuilder`** and the handoff builder name; this is not a reason to assume any group-chat builder name. |
+| Peer A2A delegation | **Agent-card discovery and task delegation through A2A** | The peer receives a task description rather than a local function call. This is distinct from agent-as-tool consultation and requires a genuine deployment/ownership boundary. |
+
+## Step 3 ΓÇö Runtime and control placement
+
+The hosting choice remains separate from these mechanism mappings: the agent may run in-process or in a separately hosted runtime, but that choice determines session isolation and lifecycle ownership.
+
+For the A2A path, discovery must precede delegation. The peerΓÇÖs ingress contract, protocol version, and wire binding must be checked independently; both sides claiming A2A support does not establish compatibility. The surface reference specifically records JSON-RPC versus HTTP+JSON binding compatibility between hosted peers as **unverified**. Do not delegate until the actual bindings are confirmed compatible.
+
+If the handoff workflow includes authorization, place human authority at the matching layer:
+
+- workflow transition approval ΓåÆ workflow-level gate;
+- consequential individual tool invocation ΓåÆ per-call approval;
+- acting against downstream systems as the caller ΓåÆ delegated-access consent.
+
+A propagated caller identifier alone does not establish delegated authority.
+
+## Step 4 ΓÇö Assurance
+
+Capture execution evidence independently of the agentΓÇÖs summary: session continuity, retrieved sources, handoff transitions, delegation requests and responses, binding-negotiation results, approvals, and tool outcomes. Evaluate those observations against the specific requirements, then verify that behavior still matches the routing decision. In particular, confirm that peer delegation remains task-level A2A rather than silently becoming a local function-tool call. Re-run these checks after framework, workflow, hosting, or peer-contract changes.
+
+## Confirmed names and unresolved surface facts
+
+The surface reference records these names as confirmed: **`AgentSession`**, **`AIContextProvider`**, **`TextSearchProvider`**, **`AgentWorkflowBuilder`**, and the handoff builder name. It also records the current session creation shape, but signatures and namespaces must be re-verified against live documentation before implementation.
+
+The following remain unresolved or require explicit verification:
+
+- The frameworkΓÇÖs overall .NET availability/GA status is marked **unverified**.
+- A2A wire-binding compatibility between the intended peers is not established.
+- The exact current MCP elicitation surface is unasserted, though it is not required by the stated responsibilities.
+- The group-chat C# builder name remains intentionally unresolved and is not assumed here.
+- Any preview component used by the eventual design requires an explicit SDK/version pin and a documented re-verification point; no preview component is asserted stable by the surface reference.
+

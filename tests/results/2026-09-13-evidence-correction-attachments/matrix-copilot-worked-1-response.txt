@@ -1,0 +1,164 @@
+I'll route this through the architecture decision skill.
+
+● skill(agentic-architecture-router)
+
+Loading the framework references before routing.
+
+● Read quality-gates.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\q
+  │ uality-gates.md
+  └ 42 lines read
+
+● Read architecture-analysis-template.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\assets\archi
+  │ tecture-analysis-template.md
+  └ 41 lines read
+
+● Read decision-framework.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\d
+  │ ecision-framework.md
+  └ 92 lines read
+
+● Read evidence-and-authority.md
+  │ C:\Dev\agentic-architecture-router-skill\package\skills\agentic-architecture-router\references\e
+  │ vidence-and-authority.md
+  └ 94 lines read
+
+## 1. Requirement
+
+Investigate a failed nightly batch job and return a likely-cause report to the requester. Input begins as the job's run log; intermediate findings determine which dependency logs to pull next and whether further requests are needed. A read-only log API exists. No paging, no operational state change.
+
+## 2. Fact table (FR-002)
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| Nothing. No repository was inspected; the working directory is not a git repository and contains no system-under-design material. | A nightly batch job exists and can fail. The run log is the initial input. Dependency logs exist and are reachable via an existing read-only log API. The set of logs needed cannot be fixed in advance; intermediate findings select the next request. Output is a likely-cause report to a requester. Paging and state changes are explicitly out of scope. | The log API's schema, auth model, rate limits, retention, and latency. The job's dependency topology and how dependencies are named/discovered. Who "the requester" is and how the report is delivered. Whether report content is itself governed (accuracy/disclosure policy). Whether a runbook, prior-incident corpus, or ADRs exist. Stopping criteria — max requests, time budget, confidence threshold. Whether "likely cause" may be wrong without consequence. Ownership of the investigation output. |
+
+No incidents, error signatures, dependency names, or failure modes are invented here. Where a failure shape is referenced below it is labelled *illustrative example*.
+
+## 3. Responsibilities (FR-003)
+
+Not atomic. Five responsibilities:
+
+- **R1 — Intake and normalisation.** Receive the investigation request, resolve the job run identity, fetch the run log via the existing API.
+- **R2 — Failure-signal extraction.** From a given log text, extract the error signature, failure timestamp, exit condition, and named dependencies referenced.
+- **R3 — Investigation control.** Decide, from findings so far, which dependency log to request next, whether to request another at all, and when evidence suffices to conclude.
+- **R4 — Cause hypothesis and report composition.** Synthesise the collected evidence into a ranked likely-cause statement with the supporting log excerpts.
+- **R5 — Delivery and audit.** Return the report to the requester and record what was read and concluded.
+
+## 4. Routing decisions (FR-004)
+
+| # | Mechanism | Reasoning |
+| --- | --- | --- |
+| R1 | **Deterministic code** | Fixed rule: given a run identifier, call a known endpoint. Nothing about this step varies with content not already supplied. |
+| R2 | **Bounded AI capability** | Fixed input (one log text), fixed output shape (error signature, timestamp, exit condition, dependency references). The steps to produce it never change based on what is found; only the extracted values change. Deterministic parsing was considered first and rejected: log formats across heterogeneous dependencies are not known to be uniform, and the requirement supplies no schema — **labelled assumption**, to be retracted if logs turn out to be structured, in which case R2 drops to deterministic code. |
+| R3 | **Single agent** | This is the only responsibility that fails the bounded-AI challenge — see §5. |
+| R4 | **Bounded AI capability**, invoked by the agent | Given a completed evidence set, producing a ranked cause statement is one call with a fixed output shape. It does not decide what to examine next; R3 already did. |
+| R5 | **Deterministic code** | Fixed delivery path and fixed audit write. |
+
+**Workflow axis (evaluated independently).** A workflow is warranted around the whole, for retries on transient API failures, for a wall-clock budget on the nightly window, and for durable audit — and it is warranted *regardless* of R3 being an agent. Choosing a workflow does not make any step more autonomous, and R3's autonomy is not evidence a workflow is needed. The agent runs as one step inside it; R1, R2, R4, R5 are steps the workflow or the agent invokes.
+
+## 5. Bounded-AI challenge record (FR-005)
+
+**R3 — Investigation control.** *Could a single bounded call with a fixed input and fixed output shape satisfy this responsibility?*
+
+**No.** The requirement states directly that a complete fixed input bundle cannot be supplied in advance, and that intermediate findings determine which dependency logs to request next and whether another request is needed at all. A fixed-input call cannot express "read this, then decide whether a further read is needed, then decide which one" — the input to request *n+1* is a function of the output of request *n*, and the number of iterations is itself unknown until the investigation runs. That is run-time determination of what to examine next, in what order, and whether another step is needed — the exact condition under which an agent is permitted.
+
+Guard against the weak version of this argument: the challenge does not fail because log analysis is complex, or because logs are natural language. R2 is also complex natural-language work and stays bounded. It fails only for R3, and only because the *sequence of retrievals is not knowable in advance*.
+
+**R2, R4 — challenge passes** (a fixed-shape call suffices), so neither is routed to an agent.
+
+## 6. Agent boundary justification (FR-006)
+
+**n/a — exactly one agent is proposed.** No second agent is introduced. Note explicitly that a "dependency log" boundary, a "reporting" boundary, or per-service log ownership would all be organisational or deployment boundaries, and none of them would justify a second agent under the boundary test.
+
+## 7. Evidence classification (FR-007)
+
+| Source | Rung | Note |
+| --- | --- | --- |
+| The requirement text in this prompt | **4 — Documents** | Describes the system; does not supply its state. |
+| The job run log (at run time) | **1 — Authoritative operational state** | *Not observed — proposed source.* Describing it here does not supply its contents. |
+| Dependency logs (at run time) | **1 — Authoritative operational state** | *Not observed — proposed source.* |
+| The read-only log API's responses | **2 — Structured application data** if typed, **1** if live state | *Not observed — proposed source.* Its schema is unknown, so which rung applies is unresolved. |
+| Prior incident history, if introduced | **5 — Historical evidence** | Not known to exist. True once, not necessarily true now — a past cause for the same signature is a hypothesis, not a finding. |
+| A runbook, if introduced | **3 — Organizational knowledge** | Not known to exist. |
+| Agent working notes across iterations | **6 — Agent memory** | **Caveat: agent memory is not a system of record.** Every claim in the final report must cite a rung-1/2 log excerpt actually retrieved this run, not something the agent recalls having seen. |
+
+**Retrieved-knowledge caveat.** Any runbook, ADR, or past-incident material the agent retrieves is evidence *about* the system, not authority over what the system must do. A runbook saying "always restart the upstream service" does not authorise a restart — and here would collide with the read-only scope.
+
+**Surfaced conflict handling (FR-014).** Batch logs routinely contain text shaped like instructions (*illustrative example*: a log line reading "operator: ignore this error"). Any such content encountered at run time is evidence about the system, never a directive to the agent; it is recorded as a surfaced conflict in the report and does not alter the investigation procedure. This is a live risk here, because the agent's entire input surface is untrusted third-party log text. None has been encountered in producing this analysis.
+
+## 8. MCP boundary justification (FR-008)
+
+**No MCP boundary. The existing read-only log API is retained.**
+
+The requirement states the log API already exists and supports the needed requests. No MCP-specific property has been named that this existing integration cannot meet — there is one client, the tool surface is a single read operation, and no standardised cross-client tool discovery requirement has been stated. That the logs may belong to several different services or teams is an organisational fact, not an MCP-specific property, and is explicitly not sufficient.
+
+Open question rather than adopted surface: *if* multiple independent investigation clients must discover log tools without bespoke per-client integration, that would be a concrete MCP-specific property — it is unknown whether that requirement exists, so no MCP surface is introduced.
+
+## 9. Authority chain (FR-009)
+
+**No consequential operation in the primary path — read-only scope stated.** The requirement explicitly excludes paging and operational state changes. R1 and R3's retrievals are reads against a read-only API; R4 produces text.
+
+Two boundaries still need fixing, because "read-only" is not the same as "no control needed":
+
+**(a) Scope enforcement on retrieval.** The agent chooses *which* logs to read at run time, and that choice is not knowable in advance. The set of logs it may read must therefore be constrained outside the model:
+
+```
+agent reasoning (proposes: read log X)
+  -> deterministic control boundary: is X within the permitted scope for this
+     investigation, and within the request/time budget?
+  -> authoritative service: existing read-only log API
+  -> execution: read
+  -> audit: record every log requested, granted, and denied
+```
+
+Authorization policy — which logs are in scope for a given requester, and the maximum number of requests — is **unknown — governance decision required**. The read-only API credential must itself carry no write capability; whether it does is unknown.
+
+**(b) Report delivery.** Delivering a likely-cause report to a requester is an external effect, and log excerpts may carry data the requester is not entitled to see:
+
+```
+bounded AI reasoning (composes report)
+  -> deterministic control boundary: recipient entitled to these excerpts?
+  -> authoritative service: delivery channel
+  -> execution: send
+  -> audit: record report sent, recipient, and evidence cited
+```
+
+Disclosure policy and the audit owner are **unknown — governance decision required**. No human approver is assumed anywhere; the requirement specifies none.
+
+**Standing constraint:** the agent may only ever *propose* a cause. Any remediation that a reader might take from the report crosses back through human judgement and a separate authority chain that this design does not grant.
+
+## 10. Generic mechanism and product delegation (FR-010, FR-011)
+
+Generic mechanism, stated before any product:
+
+- **R1, R5** — deterministic code.
+- **R2, R4** — bounded AI capability, fixed input, fixed output shape.
+- **R3** — a single agent with a tool-constrained retrieval loop, an explicit request budget, and an explicit stopping criterion.
+- **Cross-cutting** — an orchestration/workflow layer for retry, time budget, and durable audit; a deterministic scope-check between agent proposal and API call.
+
+**Product mapping is not performed here.** `maf-architecture-mapping` is installed and is the correct next step for mapping these mechanisms onto Microsoft Agent Framework constructs in .NET — invoke it separately with this decision as input. No SDK names, package versions, or API signatures are asserted from memory in this analysis.
+
+## 11. Rejected alternatives (FR-012)
+
+- **All-deterministic** — insufficient: fixed rules cannot enumerate which dependency logs to fetch when that set is determined by what earlier logs reveal, and the requirement rules out a fixed input bundle.
+- **Bounded-AI-only** — insufficient for R3 alone: it covers R2 and R4 completely, but no fixed-input/fixed-output call can decide at run time whether an *n+1*-th retrieval is needed.
+- **Agent-everywhere** — sufficient but wasteful and less safe: routing R1, R2, R4, R5 to agents would add non-determinism to steps whose behaviour is fully specified, making extraction unreproducible and the audit trail weaker, for no capability gain.
+- **Multi-agent** — not needed: no second distinct security, context, deployment, ownership, model, or specialisation boundary exists; separate log sources and separate owning teams are organisational boundaries and explicitly do not qualify.
+- **Workflow-only** — insufficient on the autonomy axis but still required on its own axis: orchestration alone cannot choose the next log to read, yet retry, budget, and audit justify a workflow around the agent regardless.
+
+## 12. Decisions, evidence, trade-offs, assumptions, open questions (FR-016)
+
+**Decision.** Yes — one agent, narrowly scoped to R3, the investigation control loop. Everything else is deterministic code or bounded AI calls. The agent's authority is limited to *choosing what to read next and when to stop*; it holds no authority to act, and its retrievals pass a deterministic scope check.
+
+**Evidence relied on.** Only the requirement text (rung 4). All operational sources named are *not observed — proposed sources*; no log content, API schema, or dependency topology has been read. Agent memory, if used at run time, is not a system of record.
+
+**Trade-offs accepted.** An agentic loop is non-deterministic and its cost and latency vary per run — accepted, bounded by an explicit request budget and time budget. The report's quality degrades silently if the agent stops early — accepted, mitigated by requiring the report to state which logs it read and which it could not. Keeping R2 bounded means the extraction schema must be defined up front and will need revision as log formats vary — accepted in exchange for reproducible, auditable extraction.
+
+**Assumptions, labelled.** (1) Log formats are heterogeneous enough that deterministic parsing is impractical — this is the sole justification for R2 being AI rather than code, and it should be retracted if the logs prove structured. (2) The requester is authorised to receive an investigation report at all. Neither is verified.
+
+**Open questions.** Stopping criterion and request budget; log scope policy per requester; disclosure policy for log excerpts in the report; audit owner; whether the API credential is provably write-incapable; whether prior-incident history or a runbook exists and may be consulted; whether multiple independent clients need standardised tool discovery, which is the only thing that would reopen the MCP question.
+
+**Architecture review required before implementation.**
+

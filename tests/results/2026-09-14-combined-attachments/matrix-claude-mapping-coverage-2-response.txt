@@ -1,0 +1,37 @@
+All twelve construct-map rows are recorded as demonstrated, and four named constructs are not: handoff, group chat, a harness agent, and governance middleware. The approved architecture itself was not supplied. The working directory holds only the prompt, so what follows is the coverage of the map, not a per-responsibility mapping of your design. This report sits at steps 2 and 6 of the skill's procedure, with dated facts carried from the surface file under step 5.
+
+## Twelve rows
+
+"Staged" means the H08/W20 material stages the row as a live beat. I did not open the companion demo repository this session, so demonstration status is as the map records it.
+
+| Row | Mechanism | Construct | Staged | Evidence limit |
+| --- | --- | --- | --- | --- |
+| 1 | Single agent deciding what to check next | `AIAgent` with a C# method bound as tool | Yes | Adapter name read from the C# quick start on 2026-09-13. .NET availability status unverified. |
+| 2 | Conversational state within one interaction | `AgentSession` | Yes | Name comes from a maintainer correction dated 2026-09-14, not from a page the crew read. `AgentThread` recorded as superseded. |
+| 3 | Cited external evidence corpus | `AIContextProvider` backed by `TextSearchProvider` | Yes | Names on the maintainer-confirmed list, 2026-09-14. |
+| 4 | Recall of the agent's own prior findings | Custom `AIContextProvider` | Yes | Base type confirmed. The provider itself is demo code with no framework name to verify. |
+| 5 | Procedural knowledge loaded on demand | `AgentSkillsProvider` plus a SKILL.md | Yes | Name on the maintainer-confirmed list, 2026-09-14. |
+| 6 | Externally owned tool surface with a recorded MCP property | `McpClient` discovery | Yes | Client and tool types read from the MCP tools page, 2026-09-13. Row applies only if the router recorded an FR-008 property. Otherwise it is a function tool over the existing API. |
+| 7 | MCP call pausing for a human answer | MCP elicitation | Yes | Exact elicitation API surface is unasserted. No signature is available from this skill. |
+| 8 | Fixed sequence with a gate at one step | Workflow graph with a human gate | Yes | Package and builder were read from the handoff orchestration page, 2026-09-13, not from a human-gate page. |
+| 9 | Per-call human sign-off | `ApprovalRequiredAIFunction` | Yes | Documented as a Microsoft.Extensions.AI type, 2026-09-13. The pause surfaces as a tool-approval request per workflow docs of that date. |
+| 10 | Second agent as a bounded capability | Agent-as-tool over its existing API | Yes | The row does not choose transport. The MCP variant needs its own FR-008 pass. |
+| 11 | Peer agent owned elsewhere, given a task | Agent-card discovery and A2A delegation | Yes | Wire-binding compatibility between two hosted peers is unverified, retained open 2026-09-14. Ingress protocol name unverified. |
+| 12 | Where the agent executes | Hosted runtime | Yes | Platform facts came from one spike on a live deployment, 2026-09-04 and 05. A correlation-id limitation and a stale replica-count IaC note are recorded. |
+
+## Named but not demonstrated
+
+- **Handoff.** Slide-only. It is one of four composition modes the material compares, and only rows 10 and 11 are staged. The construct name is recorded: a handoff builder in the workflows package, read 2026-09-13 and maintainer-confirmed 2026-09-14. Name known, demonstration absent. A design using handoff rests on documentation alone.
+- **Group chat.** Slide-only. Recorded as a sibling workflow orchestration. The C# builder name is unasserted. Neither a name nor a demonstration is available, which is the weakest position of the four.
+- **Harness agent.** Named on a slide, not implemented. No construct name, no surface entry, no demo. Nothing in this skill backs it.
+- **Governance middleware.** Not implemented as middleware. The demonstrated authority mechanisms are three layers: the workflow gate in row 8, per-call approval in row 9, and the delegated-access consent flow in the runtime-and-control reference. A design that assumes a cross-cutting governance layer must be re-expressed as one of those three or marked unbacked.
+- **Protocols as a standalone topic.** Treated as decision documents, not a runtime construct.
+
+## Evidence limits
+
+- **No decision supplied.** Step 1 is satisfied only by your statement that the architecture is approved. I cannot say which rows it exercises or whether any responsibility routes to the non-agent outcomes.
+- **Non-agent outcomes.** Deterministic maps to no construct. Bounded AI maps to a direct chat-client call, checked 2026-09-11 by reading, not on a deployment, with status unverified.
+- **Framework availability.** No .NET availability statement was found on the overview page, and the quick start adds the Foundry package with a prerelease flag. Any preview dependency needs a stated risk and a pinning strategy in the design.
+- **Date anomaly.** The surface file dates the maintainer confirmation to 2026-09-14, one day after today. I report those names as recorded but cannot treat that confirmation as an event that has happened.
+- **Relocated source claims.** The "superseded programming model" and "Responses protocol" statements are unverified source-material assessments.
+- **Two names unasserted.** The group-chat builder and the MCP elicitation API. Every other name is dated and must be re-verified against live documentation before code or a final design.

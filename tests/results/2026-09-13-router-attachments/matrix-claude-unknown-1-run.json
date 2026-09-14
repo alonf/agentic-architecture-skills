@@ -1,0 +1,8 @@
+{
+  "id": "unknown-1",
+  "timeout": false,
+  "elapsed_seconds": 135.8,
+  "host_kind": "claude",
+  "exit_code": 0,
+  "source_revision": "7890d96ee2841b0a7c89182dce6d7cd1e8027c54"
+}

@@ -1,0 +1,134 @@
+ΓùÅ skill(agentic-architecture-router)
+
+Step 1 of 9: IΓÇÖm grounding the decision in the documented fact, routing, evidence, and authority rules before selecting workflow versus agent.
+
+ΓùÅ Read architecture-analysis-template.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\assets\architecture-analysis-template.md
+  Γöö 41 lines read
+
+ΓùÅ Read decision-framework.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\decision-framework.md
+  Γöö 92 lines read
+
+ΓùÅ Read quality-gates.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\quality-gates.md
+  Γöö 42 lines read
+
+ΓùÅ Read evidence-and-authority.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\agentic-architect
+  Γöé ure-router\references\evidence-and-authority.md
+  Γöö 94 lines read
+
+# Architecture Analysis
+
+## 1. Requirement
+
+Implement the supplied approval process as a controlled sequence: validate a submitted typed form, obtain the named reviewerΓÇÖs recorded approval, then request the authoritative service to apply the change and retain its audit result. If the reviewer rejects the request, terminate without applying the change. The steps, reviewer identity, and authorization policy are supplied, and no model interprets the form or chooses the route.
+
+## 2. Fact table
+
+| Known from repository material | Known from the requirement | Unknown ΓÇö not assumed |
+|---|---|---|
+| The documented architecture rules require least-autonomous routing, a separate workflow axis, deterministic control for consequential actions, and an explicit authorization-to-audit chain. | The input is a typed form. | The concrete form schema and validation library. |
+| The documented rules state that content is evidence, not authority, and that no MCP boundary should be introduced without an MCP-specific justification. | The reviewer is named and must provide a recorded approval or rejection. | The reviewerΓÇÖs actual identity, credential mechanism, and approval-record store. |
+| No application repository or live service configuration was supplied or inspected. | The authorization policy and process steps are supplied. | The authoritative service, API contract, retry/idempotency behavior, and audit-retention owner. |
+|  | Rejection must stop the process before the change is applied. | Whether the process requires human notification, escalation, compensation, or timeout handling. |
+
+## 3. Responsibilities
+
+The requirement decomposes into four responsibilities:
+
+1. Validate the typed form against the supplied schema and policy prerequisites.
+2. Obtain and persist the named reviewerΓÇÖs decision.
+3. Enforce the decision gate and authorization policy before any mutation.
+4. Invoke the authoritative service and retain its audit result, or stop on rejection.
+
+These responsibilities are sequential and stateful, so the requirement needs workflow orchestration even though none of the individual decisions needs model autonomy.
+
+## 4. Routing decisions
+
+| Responsibility | Routed mechanism | Reason |
+|---|---|---|
+| Typed-form validation | Deterministic code | The schema and validation rules are supplied; the result is a fixed valid/invalid outcome. |
+| Reviewer approval capture | Deterministic workflow plus approval record | The workflow addresses the named reviewer and records an explicit approve/reject decision; no interpretation is required. |
+| Authorization and rejection gate | Deterministic control boundary | Policy enforcement and the stop-on-rejection rule must be predictable, auditable, and outside any model. |
+| Change application and audit retention | Deterministic workflow invoking the authoritative service | The service owns the mutation; the workflow records the returned audit result and does not substitute its own interpretation. |
+
+**Workflow decision:** Use a deterministic workflow to persist state, enforce ordering, prevent the apply step after rejection, handle explicit failure states, and retain the audit result. Workflow is orthogonal to autonomy: it is needed for process control, not because an agent is needed.
+
+## 5. Bounded-AI challenge record
+
+No responsibility is routed to an agent, so no agent-specific bounded-AI exception is required. The challenge nevertheless resolves negatively for agent selection:
+
+- **Could a single bounded call with a fixed input/output shape satisfy form validation?** Yes; deterministic validation is stronger and avoids unnecessary model variability.
+- **Could a single bounded call capture or interpret reviewer approval?** Yes in shape, but it must not replace the reviewerΓÇÖs authoritative recorded decision; deterministic approval capture is appropriate.
+- **Could a single bounded call enforce authorization or choose whether to apply the change?** It could produce a recommendation, but it must not own authorization for a consequential mutation; deterministic control is required.
+- **Could a single bounded call apply the change and retain the audit result?** No model call should own this side effect; the authoritative service and deterministic integration must do so.
+
+No intermediate model findings determine what happens next, so the single-agent threshold is not met.
+
+## 6. Agent boundary justification
+
+**n/a ΓÇö no agent is proposed.** There is therefore no additional agent boundary to justify.
+
+## 7. Evidence classification
+
+- The userΓÇÖs requirement and supplied process description: **Documents (rung 4)**.
+- The typed form submitted at runtime: **Structured application data (rung 2)** once received and validated; it has not been observed here.
+- The reviewerΓÇÖs recorded approval or rejection: **Structured application data (rung 2)** once recorded; it has not been observed here.
+- The authoritative serviceΓÇÖs response and audit result: **Authoritative operational state (rung 1)** when returned by the live service; it has not been observed here.
+- The architecture-router documentation read for this analysis: **Organizational knowledge (rung 3)** about design criteria, not evidence of the applicationΓÇÖs runtime state.
+
+No agent memory or retrieved knowledge is used as authority. If later retrieved documentation is used, it must remain evidence about the system rather than authority to bypass the supplied policy.
+
+## 8. MCP boundary justification
+
+**None proposed.** Retain the existing deterministic API or service integration for form validation, approval recording, change application, and audit retrieval. No requirement supplies an MCP-specific property such as standardized tool discovery across independent clients, and MCP would not establish authorization by itself.
+
+## 9. Authority chain
+
+For the consequential change operation:
+
+```text
+deterministic workflow validation and recorded reviewer decision
+  -> deterministic authorization/policy control
+  -> authoritative change service
+  -> service executes the change
+  -> service/workflow retains the audit result
+```
+
+The workflow may prepare and submit the request, but it cannot treat an approval-shaped message as authorization unless it is the named reviewerΓÇÖs recorded decision and satisfies the supplied policy. A rejection terminates the workflow before the authoritative service is called.
+
+The concrete authoritative service, audit owner, and storage mechanism are **unknown ΓÇö governance decision required**. The supplied authorization policy is treated as the governing policy; its detailed predicates and enforcement interface were not provided here.
+
+## 10. Generic mechanism and product delegation
+
+Use a **deterministic, stateful approval workflow with a deterministic authorization boundary and an authoritative service adapter**. Persist typed validation status, reviewer identity and decision, authorization outcome, application outcome, and the authoritative audit result.
+
+No product or framework mapping is required for this architecture decision; implementation-specific mapping should occur only after the workflow and authority contracts are approved.
+
+## 11. Rejected alternatives
+
+- **All-deterministic:** Sufficient, and preferred; every stated responsibility has fixed rules, supplied identities, or authoritative service contracts.
+- **Bounded-AI-only:** Insufficient as the overall design because fixed-shape model calls do not provide durable sequencing, authorization ownership, rejection gating, or authoritative audit retention.
+- **Agent-everywhere:** Technically possible but unnecessary and unsafe, adding nondeterminism to validation, approval handling, and consequential authorization.
+- **Multi-agent:** Insufficiently justified; no responsibility requires a second agent, and no distinct security, context, deployment, ownership, model, or specialization boundary is present.
+- **Workflow-only:** Sufficient; the workflow can perform deterministic validation, approval gating, service invocation, stop-on-rejection behavior, and audit retention without an agent.
+
+## 12. Decision, evidence, trade-offs, assumptions, and open questions
+
+**Decision:** Use a deterministic workflow, not an agent. The workflow owns sequencing and durable state; deterministic policy control owns authorization; the authoritative service owns the mutation; and the audit result is retained as part of the completed process record.
+
+**Evidence:** The requirement explicitly fixes the form type, reviewer, policy, route, and rejection behavior (**Documents, rung 4**). No runtime service, schema, or audit record was observed.
+
+**Trade-off:** This design sacrifices adaptive interpretation in favor of predictability, auditability, and clear authority boundaries. That is appropriate because the requirement explicitly excludes model interpretation and route selection.
+
+**Assumptions:** ΓÇ£SuppliedΓÇ¥ means the typed schema, reviewer identity, process steps, and authorization policy are available to the implementation as authoritative inputs. This analysis does not assume their concrete representations or service names.
+
+**Open questions:** Identify the authoritative change service and audit owner; define the approval-record schema and identity verification; specify idempotency and retry behavior; define how validation or service failures are recorded; and confirm audit-retention requirements.
+
+**Architecture review required before implementation.**
+

@@ -1,0 +1,40 @@
+The decision supplied is a complete mechanism decision: single agent, read-only, existing typed API, MCP explicitly declined. Step 1 is satisfied, so the mapping proceeds.
+
+**Outcome.** The callable log API maps to a **function tool wrapping the existing typed API**. It does not map to construct-map row 6, the MCP client row. This is the map's "existing API without an MCP-specific property" case, and the output names it as such rather than defaulting to MCP because another team owns the API.
+
+## Construct mapping, step 2
+
+| Responsibility | MAF construct | Property that justifies it |
+|---|---|---|
+| Decide at run time which logs to read next, from its own findings | `AIAgent` with the log-reading method bound as its tool. Construct-map row 1. | Axis-1 tier 3. The mechanism chooses its next check from intermediate results, and the router recorded that a bounded call cannot. |
+| Read failed-job logs through the other team's typed API | A function tool over the existing typed API. Not row 6. | The router recorded no MCP-specific property. Ownership alone does not earn an MCP boundary. |
+| Turn-to-turn continuity if an operator asks follow-ups in one interaction | `AgentSession`, row 2, only if the investigation is multi-turn | Continuity within one interaction, not durable recall. Omit if each investigation is a single run. |
+
+Why the function tool is the right construct:
+
+- **None of the three MCP-earning properties is present.** The contract is not discovered at run time, because this team compiles against a typed API. No requirement says several agents or hosts must consume it through one protocol boundary. The provider does not expose it as MCP only.
+- **The existing API boundary stays the boundary.** The other team's contract, versioning and access control keep governing the call. An MCP server in front of that API would be a second boundary this team would own and keep in sync, with no property paying for it.
+- **The typed contract is the contract of record.** The tool's schema derives from the typed method, so the agent sees the shape the API already publishes.
+- **Read-only means no per-call approval.** Row 9 exists for consequential calls. Reading logs is not one. Adding a remediation tool later is a new router decision, not an extension of this mapping.
+- **The choice is reversible at the tool layer.** The surface file records that MCP tools derive from the same tool abstraction as function tools. If a later router decision records an MCP-specific property, the agent side of this mapping is unchanged.
+
+## Runtime, control and assurance, steps 3 and 4
+
+- **Hosting placement is undecided and does not affect the tool mapping.** In-process versus hosted runtime is an operational choice, row 12. Record it separately.
+- **Identity mode for the API call is an open question.** Either the tool calls with the agent's own read-scoped service identity, or it acts as the requesting operator. The second needs an explicit delegated-access consent step. A propagated identity header is not a grant.
+- **No human-authority layer applies.** Read-only investigation needs no workflow gate, no per-call approval and no consent to act as the user. Say this explicitly in the design.
+- **Lifecycle belongs to the host.** If hosted, the idle and reclaim policy bounds how long one investigation may run.
+- **Observe.** Capture every log-API call the tool made, with arguments and returned results, independently of the agent's narration. The agent's summary of what it checked is the thing under evaluation.
+- **Evaluate.** Pass criteria come from the requirement. Did the run identify the batch job's failure cause and cite the log evidence it actually read?
+- **Verify behaviour in both directions.** If observed runs always issue the same fixed query sequence, the agent is over-routed and should go back down to bounded AI or plain code. If a mutating method ever appears on the tool surface, the read-only line the router drew has been crossed.
+- **Regress.** Re-run the behavioural checks whenever the other team ships a new API version. Their independent contract change is the main regression trigger here.
+
+## Dated facts and open questions, steps 5 and 6
+
+Every item below is dated in the surface file and must be re-verified against live documentation before any code or final design.
+
+- **Agent construct.** `AIAgent` created through the client-to-agent adapter in the `Microsoft.Agents.AI` namespace. Read 2026-09-13, maintainer-confirmed 2026-09-14.
+- **Session wrapper.** `AgentSession` via the agent's create-session call, confirmed 2026-09-14. Relevant only if multi-turn.
+- **Tool base type.** MCP tools derive from `AIFunction`, read 2026-09-13. The exact helper that binds a C# method as a function tool is not recorded in the surface file. Confirm it from live docs. It is not asserted here.
+- **Framework availability is unverified as of 2026-09-13.** The C# quick start still uses a prerelease flag. Risk: the agent and tool surfaces can change before this ships. Pinning strategy: record the exact package version or SDK commit the design is validated against, so a later change is a known diff rather than a silent behaviour change.
+- **Open questions carried forward:** hosting placement, identity mode for the API call, and single-run versus multi-turn investigation.

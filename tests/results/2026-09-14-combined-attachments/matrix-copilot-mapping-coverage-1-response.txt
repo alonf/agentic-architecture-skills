@@ -1,0 +1,51 @@
+ΓùÅ skill(maf-architecture-mapping)
+
+ΓùÅ Read runtime-and-control.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\runtime-and-control.md
+  Γöö 62 lines read
+
+ΓùÅ Read assurance.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\assurance.md
+  Γöö 55 lines read
+
+ΓùÅ Read maf-surface.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\maf-surface.md
+  Γöö 116 lines read
+
+ΓùÅ Read construct-map.md
+  Γöé ~\AppData\Local\Temp\t306-t307-f88bfbb1267646e69fc448c47db0d242\package\skills\maf-architecture-
+  Γöé mapping\references\construct-map.md
+  Γöö 67 lines read
+
+**Step 2 ΓÇö construct-map coverage.** Assuming the architecture decision has already selected the applicable mechanisms, the twelve rows are covered as follows. ΓÇ£DemonstratedΓÇ¥ means the source material stages or verifies the construct at the architectural level; it does not assert current SDK availability, signatures, or production readiness.
+
+| # | Responsibility | MAF construct | Coverage and evidence limit |
+|---:|---|---|---|
+| 1 | Runtime-directed single-agent reasoning | `AIAgent` with a function tool | **Demonstrated.** The material stages an agent deciding what to check next. The client-to-agent adapter and exact API surface must be re-verified separately. |
+| 2 | State across turns in one interaction | `AgentSession` | **Demonstrated.** Conversational continuity is shown conceptually. This does not demonstrate durable memory or cross-session recall. |
+| 3 | Citable external evidence | `AIContextProvider` backed by search, such as `TextSearchProvider` | **Demonstrated.** Retrieval is separated from reasoning and attributed to an external corpus. The evidence does not establish a particular search backend or current package surface. |
+| 4 | Recall of prior findings across sessions | Custom `AIContextProvider` | **Demonstrated conceptually.** The mapping distinguishes agent history from external evidence, but recalled findings remain hypotheses requiring re-verification. |
+| 5 | On-demand procedural knowledge | `AgentSkillsProvider` with `SKILL.md` | **Demonstrated.** Progressive disclosure is covered; the material does not demonstrate arbitrary executable procedures being loaded as skills. |
+| 6 | Independently owned MCP tool boundary | `McpClient` discovery against an MCP server | **Demonstrated.** MCP discovery is covered where the approved routing decision specifically justifies MCP. Ownership alone is insufficient; an existing typed API remains the preferred function-tool boundary otherwise. |
+| 7 | Human answer during an MCP call | MCP elicitation | **Demonstrated at the protocol-mechanism level.** The pause/resume responsibility belongs to MCP. The exact current elicitation API remains unasserted. |
+| 8 | Fixed sequence with stage authorization | Workflow graph with a human gate | **Demonstrated.** The material covers deterministic sequencing combined with an authorization boundary. This is not evidence that handoff or group-chat orchestration was implemented. |
+| 9 | Approval before one consequential tool call | `ApprovalRequiredAIFunction` | **Demonstrated.** Per-call approval is distinguished from row 8ΓÇÖs graph-level gate. It does not demonstrate governance middleware spanning all tools or agents. |
+| 10 | Second agent as a bounded capability | Agent-as-tool over its callable API | **Demonstrated.** The second agent is consulted as a bounded capability. MCP transport is conditional on a separately approved MCP-specific property. |
+| 11 | Peer-agent task delegation | Agent-card discovery and A2A task delegation | **Demonstrated conceptually/staged.** Delegation is distinguished from agent-as-tool. Binding compatibility between hosted peers was not independently verified, so interoperability must not be assumed. |
+| 12 | Independent execution placement | Hosted runtime | **Demonstrated.** Hosting is treated as an operational boundary affecting isolation, lifecycle, identity, and costΓÇönot as an autonomy mechanism. |
+
+**Explicitly not demonstrated.** The material names but does not implement:
+
+- **Handoff:** slide-level comparison only; it is a workflow orchestration mode, not evidence that the demonstrated workflow gate used handoff.
+- **Group chat:** slide-level comparison only; its exact current builder/name is intentionally unasserted.
+- **Harness agent:** named on a slide, not implemented in the demonstration.
+- **Governance middleware:** not demonstrated as middleware. The covered authority mechanisms are the workflow gate, per-tool-call approval, and delegated-access consentΓÇönot a universal governance layer.
+- **Protocols as a standalone construct:** treated as runtime/hosting and ingress concerns rather than a separate demonstrated construct.
+
+**Steps 3ΓÇô6 ΓÇö runtime, assurance, and evidence limits.** The mapping still requires explicit decisions about in-process versus hosted placement, ingress, protocol/binding negotiation, isolation, lifecycle control, identity propagation, and which human-authority layer applies. The material verifies per-session isolation and caller-identifier propagation in a deployed setting, but an identifier is not a delegated credential; acting as the caller requires explicit consent. A2A wire-binding compatibility remains unverified, and prior scaling descriptions were found stale.
+
+Assurance is separate from construct coverage: independently observe tool calls, arguments, results, and approvals; evaluate each run against its requirement; verify that observed autonomy still matches the approved routing decision; and regress those checks after changes. No harness implementation, current availability claim, package version, namespace, or method signature is established by this mapping.
+

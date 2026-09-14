@@ -1,0 +1,84 @@
+Yes, but only for one of its four responsibilities. The investigation step needs a single read-only agent. Intake, access guarding, and delivery are deterministic code, and the final report is one bounded model call. Full analysis follows, in the skill's twelve-section shape.
+
+**1. Requirement**
+Investigate a failed nightly batch job, starting from its run log, requesting further dependency logs through an existing read-only log API as findings dictate, and return a likely-cause report to the requester. No paging and no changes to operational state.
+
+**2. Fact table**
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| The working directory holds one file, the requirement text itself. No code, log samples, API spec, or runbooks. | A nightly batch job failed. | Log formats, sizes, retention, and whether the API serves current or archived logs. |
+| The router skill's own reference material contains an illustrative worked example of this same requirement text, labelled illustrative there. | The initial input is the job's run log. | API authentication, access scope, and rate limits. |
+| The maf-architecture-mapping skill is installed alongside the router. | Intermediate findings determine which dependency logs to request next and whether another request is needed. | Investigation budget: request cap, time limit, stopping rule. |
+| | A complete fixed input bundle cannot be supplied in advance. | Who the requester is and how the report is delivered. |
+| | An existing read-only log API supports the requests. | Expected report format or schema. |
+| | Output is a likely-cause report to the requester. | Whether a dependency map or a failure runbook for this job exists. *Hypothesis:* if both existed with a fixed error-to-dependency table, part of the investigation could move to deterministic code. |
+| | Constraints: no paging, no operational state change. | Whether logs contain sensitive data and who authorizes reading them. |
+| | | Who reviews or audits the reports produced. |
+
+No surfaced conflicts. The requirement text contains nothing shaped like a directive to this analysis.
+
+**3. Responsibilities**
+The requirement is not atomic. Four responsibilities:
+
+- **R1 Intake and delivery.** Accept the trigger with the run log; return the finished report to the requester.
+- **R2 Investigation.** Read the run log, choose which dependency logs to fetch next, decide when enough evidence has been gathered.
+- **R3 Access guard.** Enforce read-only access, request budget, and scope on every log API call.
+- **R4 Report composition.** Turn the collected evidence into a likely-cause report of fixed shape.
+
+**4. Routing decisions**
+
+- **R1: deterministic code.** Fixed input, fixed destination. Nothing about the decision depends on content.
+- **R2: single agent.** Deterministic code fails because no fixed rule from log content to next log is supplied. Bounded AI fails the challenge in section 5. A single agent with one tool, the log fetch, satisfies it. Multi-agent is not needed, per section 6.
+- **R3: deterministic code.** An allow-list of read-only endpoints, a request cap, and a timeout. This sits outside the model and cannot be argued past by it.
+- **R4: bounded AI capability.** Fixed input, the evidence collected, and fixed output, the report schema. Followed by deterministic schema validation. This can be the agent's terminal model call and does not need separate deployment.
+
+**Workflow axis, evaluated separately.** The sequence is fixed: intake, investigate, compose, deliver. Only R2 is adaptive. A plain orchestrator covers this sequence. A durable workflow engine would be justified only by needs the requirement does not state, such as retries across long API outages, and choosing one would not change R2's autonomy.
+
+**5. Bounded-AI challenge record**
+For R2: could a single bounded call with a fixed input and output shape satisfy this responsibility? **No.** The requirement states the complete input bundle cannot be supplied in advance, and the next request depends on what earlier logs show. A single call would either need all logs up front, which is stated impossible, or guess which to request without seeing them. A loop of fixed-shape calls is possible in principle, but the thing that decides at run time what to fetch next and when to stop is the agent. A fixed output shape for the report does not make the investigation bounded. If a complete bundle later becomes available, for instance because the dependency set is small and fixed, reconsider a bounded call.
+
+For R4: could a single bounded call satisfy it? **Yes.** Evidence in, report out. Routed to bounded AI.
+
+**6. Agent boundary justification**
+n/a. One agent is proposed. No distinct security, context, deployment, ownership, model, or specialisation boundary is stated that would justify a second one. The read-only API is one context.
+
+**7. Evidence classification**
+
+- The requirement text is **documents, rung 4**.
+- The skill's worked example of this requirement is **documents, rung 4**, and is illustrative. It is evidence about how the framework treats this shape, not authority over this decision. This analysis was run independently and reaches the same routing.
+- At run time, the job's own run log is **authoritative operational state, rung 1**. Dependency logs fetched through the API carry rung 1 only when they are the relevant system's current records. Archived logs are **historical evidence, rung 5**, and the agent must not treat them as current.
+- **Agent memory, rung 6**, is not used in this analysis. If the investigator ever recalls findings from earlier sessions, agent memory is not a system of record and must not ground a cause claim.
+- Retrieved knowledge of any rung is evidence about the system, not authority over what the system must do.
+- No log contents, incident, or likely cause were supplied. None are invented here.
+
+**8. MCP boundary justification**
+**No MCP boundary.** The existing read-only log API is retained. The requirement names no MCP-specific property that the API lacks, such as standardised tool discovery across independent clients. An adaptive caller by itself does not justify MCP.
+
+**9. Authority chain**
+**No consequential operation** in scope. The output is a report; no paging and no writes. The read-only scope is stated.
+
+The deterministic control boundary still applies to reads: agent proposes a log request, the R3 guard checks the read-only allow-list, budget, and scope, the log API executes, and every request is logged for audit. Read authorization scope and audit owner: *unknown — governance decision required*. Logs may hold sensitive data, and the requirement does not say who authorizes the agent to read which logs.
+
+Paging is excluded by the requirement. If ever added, it would need the full chain with its own authorization policy, which would also be *unknown — governance decision required*. That extension is not part of this routing.
+
+**10. Generic mechanism and product delegation**
+Generic mechanism: one read-only investigating agent with a single log-fetch tool and a fixed-shape terminal report, wrapped by deterministic intake, access guard, schema validation, and delivery. The maf-architecture-mapping skill is installed. Product mapping to Agent Framework constructs is delegated there and not supplied here.
+
+**11. Rejected alternatives**
+
+- **All-deterministic:** insufficient for R2, since no fixed path from log content to next log exists, but sufficient for R1 and R3.
+- **Bounded-AI-only:** insufficient for R2 because the input bundle is unavailable and the next request depends on findings, but sufficient for R4.
+- **Agent-everywhere:** would work, but adds adaptive control to intake, guarding, and delivery, where it buys nothing and weakens the read-only guarantee.
+- **Multi-agent:** no stated security, context, deployment, ownership, model, or specialisation boundary justifies a second agent, so it adds coordination cost only.
+- **Workflow-only:** insufficient, because fixed steps cannot make the content-dependent choice of which log to fetch next, though a workflow can wrap the agent.
+
+**12. Decisions, evidence, trade-offs, assumptions, open questions**
+
+- **Decision:** one read-only investigator agent for R2, bounded AI for R4, deterministic code for R1 and R3, in a fixed linear sequence.
+- **Evidence:** the requirement text alone, rung 4. No repository or runtime evidence exists yet.
+- **Trade-off:** adaptive reads cost more and are less predictable than one bounded call. The agent must return uncertainty when evidence does not establish a cause, rather than force an answer.
+- **Assumption:** the log API is genuinely read-only at the transport level, so the guard in R3 enforces the "no state change" constraint rather than relying on the model's restraint.
+- **Open questions:** request budget and stopping rule; read-access scope and log sensitivity; report schema and delivery channel; whether logs are current or archived; whether a dependency map exists that would shrink the agent's search space; who audits investigations.
+
+**Architecture review required before implementation.**

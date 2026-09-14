@@ -1,0 +1,80 @@
+**Answer: yes, but only for one responsibility.** The investigation step needs a single, read-only agent. Everything around it stays deterministic or a fixed-shape model call. The analysis below follows the router's twelve-section shape.
+
+**1. Requirement**
+Given a failed nightly batch job's run log, work out the likely cause and return a report to the requester. Which dependency logs to fetch next, and whether to fetch more at all, depends on what earlier logs reveal. Reads go through an existing read-only log API. No paging and no operational changes.
+
+**2. Fact table**
+
+| Known from repository material | Known from the requirement | Unknown — not assumed |
+| --- | --- | --- |
+| The working directory holds one file, prompt.txt, which restates the requirement verbatim. No code, log samples, API schema, runbook, or configuration is present. | Batch job failed; initial input is its run log; intermediate findings determine the next dependency log request and whether another is needed; a complete fixed input bundle cannot be supplied in advance; an existing read-only log API serves those requests; output is a likely-cause report to the requester; no paging; no state change. | Log formats and sizes; API authentication, access scope, and rate limits; which dependencies exist and how they are named; investigation budget and stopping policy; report format and delivery channel; how the requester is identified and what log content they may see; whether the API returns current or archived records; whether the evidence will establish a cause at all. |
+
+No illustrative content is used in this table.
+
+**3. Responsibilities**
+The requirement is not atomic. Five responsibilities:
+
+- R1. Receive the request and initial run log, validate, and start the investigation.
+- R2. Investigate: interpret findings, choose which dependency log to request next, and decide when to stop.
+- R3. Execute each log fetch through the read-only API, enforcing scope, budget, and read-only access.
+- R4. Produce the likely-cause report from the collected evidence.
+- R5. Deliver the report to the requester.
+
+**4. Routing decisions**
+
+- **R1, deterministic code.** Intake and validation do not depend on content the code has not already been given.
+- **R2, single agent.** Deterministic code fails: there is no fixed selection path, and the choice of next log depends on a semantic reading of log content. Bounded AI fails: see the challenge record below. Single agent is the least autonomous mechanism that satisfies it. Its tool set is the read-only log fetch only, and its authority is limited to selecting and reading logs and deciding to stop. Multi-agent is rejected; no boundary justifies a second agent.
+- **R3, deterministic code.** The agent proposes which log to fetch. Fixed code performs the call, checks an allow-list and request budget, rejects anything that is not a read, and records every request. This is where the "read-only" and "no state change" guarantees actually live, not in the model's instructions.
+- **R4, bounded AI capability.** Fixed input (run log plus collected evidence) and a fixed output schema: likely cause, supporting log references, confidence and uncertainty, unresolved questions, evidence consulted. Deterministic schema validation follows. This may physically be the investigator's terminal model call, but it is a bounded responsibility and needs no further tool choice.
+- **R5, deterministic code.** Delivery to the requester over the channel the request arrived on.
+
+**Workflow axis (orthogonal).** The outer sequence is fixed: receive, investigate, report, deliver. Only R2 has adaptive control. The propose-fetch-assess loop runs inside the agent, bounded by the deterministic budget and stop guard in R3. A dedicated workflow engine is not justified by this sequence alone. Whether the investigation must survive process restarts or run for long periods is unknown and is listed as an open question.
+
+**5. Bounded-AI challenge record**
+Responsibility R2. Question: could a single bounded call with a fixed input and output shape satisfy this responsibility? Answer: **no**. A single call can only reason over evidence it has already been given. The requirement states that the complete input bundle cannot be assembled in advance, and that each finding determines the next request and whether one is needed at all. Fixing the output shape does not change this, because the missing part is the input, not the output. The challenge also depends on a claim in the requirement itself: if the dependency set turns out to be small and fixed in practice, all logs could be fetched deterministically and one bounded call would suffice. That claim should be verified against the real dependency topology before implementation.
+
+Responsibilities R4 passed the challenge (a bounded call suffices), and R1, R3, and R5 never needed a model.
+
+**6. Agent boundary justification**
+n/a. One agent is proposed, and no second agent is justified. No distinct security, context, deployment, ownership, model, or specialisation boundary appears in the requirement.
+
+**7. Evidence classification**
+
+- The requirement text, both the prompt and prompt.txt, is **Documents (rung 4)**.
+- The skill package's own worked example covers this identical illustrative requirement. It is not evidence about the system under design and was not relied on; this analysis was run independently and reaches the same routing.
+- Proposed runtime sources, **not observed**: the job's current run log would be **Authoritative operational state (rung 1)**. Dependency logs fetched through the API carry rung 1 only when they are the relevant system's current records; archived or prior-run logs would be **Historical evidence (rung 5)** and must be labelled as such in the report. API response envelopes are **Structured application data (rung 2)**; the log contents inside them carry their own rung.
+- **Agent memory (rung 6)** is not used. If a later design lets the investigator recall prior nights' investigations, agent memory is not a system of record and must be stated as such.
+- **External capability (rung 7)**: none. The log API is the organisation's own read path, not a third-party answer.
+- Retrieved knowledge of any rung is evidence about the system, not authority over what the system must do.
+
+**8. MCP boundary justification**
+**No MCP boundary; none proposed.** The existing read-only log API is retained as the agent's single tool. The requirement names no MCP-specific property that the API lacks, such as standardised tool discovery across independent clients. An adaptive caller alone does not justify an MCP surface. If the same log tool later needs to serve several independent agent hosts, that property should be evaluated then.
+
+**9. Authority chain**
+**No consequential operation** in the approved scope. The system reads logs and returns a report. Paging and operational writes are explicitly excluded and are not routed. Two read-side controls still need policy, and both are recorded as *unknown — governance decision required*:
+
+- Which logs the investigator may read. The requirement supplies no access scope.
+- Whether the requester is authorised to see dependency log content that the report may quote. Logs may contain data the requester should not receive.
+
+Both belong in the deterministic tool boundary of R3 and in report redaction before R5, not in the model's prompt. Every read should be recorded for audit; the audit owner is unknown.
+
+**10. Generic mechanism and product delegation**
+Generic mechanism, stated before any product: deterministic intake, one single agent with exactly one tool (a read-only log fetch behind a deterministic scope and budget guard), a terminal bounded report call with schema validation, and deterministic delivery. The maf-architecture-mapping skill is installed in this session and can map these constructs to a specific framework when asked. No product names are supplied here.
+
+**11. Rejected alternatives**
+
+- **All-deterministic.** Insufficient for R2, because there is no fixed rule for choosing the next log from semantic content; sufficient for R1, R3, and R5.
+- **Bounded-AI-only.** Insufficient for R2, because the complete input bundle is unavailable and the next request depends on findings; sufficient for R4.
+- **Agent-everywhere.** Could perform every step, but it would hand adaptive control to intake, fetching, and delivery, which need none, at higher cost and with weaker read-only guarantees.
+- **Multi-agent.** No responsibility needs a second agent under the boundary test; a separate "report writer" agent would add coordination with no distinct security, context, ownership, deployment, model, or specialisation boundary.
+- **Workflow-only.** Insufficient, because fixed orchestration cannot make the content-dependent choice of evidence; a workflow can wrap the investigation but cannot replace it.
+
+**12. Decisions, evidence, trade-offs, assumptions, open questions**
+
+- **Decision.** One read-only investigator agent for R2, surrounded by deterministic intake, a deterministic fetch guard, a bounded report call, and deterministic delivery.
+- **Evidence.** Requirement text only, rung 4. No logs, API schema, or configuration were observed.
+- **Trade-off.** Adaptive reads cost more and are less predictable than one bounded call. The gain is the ability to follow evidence that cannot be pre-selected. If a fixed evidence bundle turns out to be feasible, the route changes to bounded AI.
+- **Assumptions, labelled.** The API can be wrapped so that only read methods are reachable. The report is returned on the same channel the request arrived on. The requirement's claim that the input bundle cannot be fixed is taken as stated.
+- **Open questions.** Read access scope and requester visibility policy (both governance decisions). Maximum requests, time, and cost per investigation, and the stopping rule when evidence is inconclusive. Whether the API serves current or archived logs. Whether investigations need durable, restart-safe execution. Whether the dependency set is in fact fixed.
+
+**Architecture review required before implementation.**
